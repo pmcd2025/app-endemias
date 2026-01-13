@@ -1,0 +1,761 @@
+
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import type { Tables, InsertTables } from '../lib/database.types';
+
+type Server = Tables<'servers'>;
+
+interface DailyEntry {
+  id?: string;
+  day_of_week: number;
+  worked_days: number | null;
+  production: number | null;
+  status: string | null;
+}
+
+interface WeeklyRecordWithDetails {
+  id: string;
+  year: number;
+  week_number: number;
+  saturday_active: boolean | null;
+  status: string | null;
+  server_id: string;
+  daily_entries: DailyEntry[];
+}
+
+// Interface para dados hierárquicos
+interface SupervisorGeralWithArea {
+  id: string;
+  name: string;
+  supervisoresArea: {
+    id: string;
+    name: string;
+    servidores: Server[];
+  }[];
+}
+
+const statusColors: Record<string, { bg: string; text: string; abbrev: string }> = {
+  'Normal': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', abbrev: 'N' },
+  'Férias': { bg: 'bg-blue-500/20', text: 'text-blue-400', abbrev: 'FE' },
+  'Falta Justificada': { bg: 'bg-amber-500/20', text: 'text-amber-400', abbrev: 'FJ' },
+  'Falta Sem Justificativa': { bg: 'bg-red-500/20', text: 'text-red-400', abbrev: 'FS' },
+  'Feriado': { bg: 'bg-purple-500/20', text: 'text-purple-400', abbrev: 'FD' },
+  'Facultativo': { bg: 'bg-cyan-500/20', text: 'text-cyan-400', abbrev: 'FA' },
+  'Folga de Aniversário': { bg: 'bg-pink-500/20', text: 'text-pink-400', abbrev: 'AN' },
+};
+
+const statusOptions = [
+  'Normal', 'Férias', 'Falta Justificada', 'Falta Sem Justificativa',
+  'Feriado', 'Facultativo', 'Folga de Aniversário'
+];
+
+const dayNames = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+const Reports: React.FC = () => {
+  const { userProfile } = useAuth();
+
+  // Dados
+  const [servers, setServers] = useState<Server[]>([]);
+  const [hierarchyData, setHierarchyData] = useState<SupervisorGeralWithArea[]>([]);
+  const [isLoadingServers, setIsLoadingServers] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Modal de detalhes do servidor
+  const [selectedServer, setSelectedServer] = useState<Server | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedWeeks, setSelectedWeeks] = useState<number[]>([getCurrentWeekNumber()]);
+  const [serverRecords, setServerRecords] = useState<WeeklyRecordWithDetails[]>([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+
+  // Modal de edição
+  const [editingRecord, setEditingRecord] = useState<WeeklyRecordWithDetails | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editWeekData, setEditWeekData] = useState<Record<number, DailyEntry>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const years = Array.from({ length: 6 }, (_, i) => (2025 + i));
+  const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
+
+  function getCurrentWeekNumber() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+    const week1 = new Date(d.getFullYear(), 0, 4);
+    return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  }
+
+  // Fetch servers on mount
+  useEffect(() => {
+    if (userProfile) {
+      fetchServers();
+    }
+  }, [userProfile]);
+
+  // Fetch records when modal opens or filters change
+  useEffect(() => {
+    if (isModalOpen && selectedServer && selectedWeeks.length > 0) {
+      fetchServerRecords();
+    }
+  }, [isModalOpen, selectedServer, selectedYear, selectedWeeks]);
+
+  const fetchServers = async () => {
+    if (!userProfile) return;
+
+    try {
+      let query = supabase.from('servers').select('*').order('name');
+
+      if (userProfile.role === 'supervisor_area') {
+        query = query.eq('supervisor_area_id', userProfile.id);
+      } else if (userProfile.role === 'supervisor_geral') {
+        query = query.eq('supervisor_geral_id', userProfile.id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setServers(data || []);
+      await buildHierarchyData(data || []);
+    } catch (error) {
+      console.error('Error fetching servers:', error);
+    } finally {
+      setIsLoadingServers(false);
+    }
+  };
+
+  const buildHierarchyData = async (serversList: Server[]) => {
+    if (!userProfile) return;
+
+    try {
+      const supervisorGeralIds = [...new Set(serversList.map(s => s.supervisor_geral_id).filter(Boolean))];
+      const supervisorAreaIds = [...new Set(serversList.map(s => s.supervisor_area_id).filter(Boolean))];
+
+      const { data: supervisoresGeraisData } = await (supabase.from('users') as any)
+        .select('id, name')
+        .in('id', supervisorGeralIds);
+
+      const { data: supervisoresAreaData } = await (supabase.from('users') as any)
+        .select('id, name, supervisor_geral_id')
+        .in('id', supervisorAreaIds);
+
+      const hierarchy: SupervisorGeralWithArea[] = [];
+
+      (supervisoresGeraisData || []).forEach((supGeral: any) => {
+        const areasDoGeral = (supervisoresAreaData || []).filter(
+          (supArea: any) => supArea.supervisor_geral_id === supGeral.id
+        );
+
+        const supervisoresArea = areasDoGeral.map((supArea: any) => ({
+          id: supArea.id,
+          name: supArea.name,
+          servidores: serversList.filter(s => s.supervisor_area_id === supArea.id)
+        }));
+
+        const servidoresSemArea = serversList.filter(
+          s => s.supervisor_geral_id === supGeral.id && !s.supervisor_area_id
+        );
+
+        if (servidoresSemArea.length > 0) {
+          supervisoresArea.push({
+            id: 'sem-area',
+            name: 'Sem Supervisor de Área',
+            servidores: servidoresSemArea
+          });
+        }
+
+        hierarchy.push({
+          id: supGeral.id,
+          name: supGeral.name,
+          supervisoresArea
+        });
+      });
+
+      const servidoresSemGeral = serversList.filter(s => !s.supervisor_geral_id);
+      if (servidoresSemGeral.length > 0) {
+        hierarchy.push({
+          id: 'sem-geral',
+          name: 'Sem Supervisor Geral',
+          supervisoresArea: [{
+            id: 'sem-area',
+            name: 'Sem Supervisor de Área',
+            servidores: servidoresSemGeral
+          }]
+        });
+      }
+
+      setHierarchyData(hierarchy);
+    } catch (err) {
+      console.error('Erro ao construir hierarquia:', err);
+    }
+  };
+
+  const fetchServerRecords = async () => {
+    if (!selectedServer || selectedWeeks.length === 0) return;
+
+    setIsLoadingRecords(true);
+    try {
+      const { data, error } = await supabase
+        .from('weekly_records')
+        .select(`
+          id,
+          year,
+          week_number,
+          saturday_active,
+          status,
+          server_id,
+          daily_entries (
+            id,
+            day_of_week,
+            worked_days,
+            production,
+            status
+          )
+        `)
+        .eq('server_id', selectedServer.id)
+        .eq('year', selectedYear)
+        .in('week_number', selectedWeeks)
+        .order('week_number');
+
+      if (error) throw error;
+
+      const records: WeeklyRecordWithDetails[] = (data || []).map((r: any) => ({
+        id: r.id,
+        year: r.year,
+        week_number: r.week_number,
+        saturday_active: r.saturday_active,
+        status: r.status,
+        server_id: r.server_id,
+        daily_entries: r.daily_entries || []
+      }));
+
+      setServerRecords(records);
+    } catch (err) {
+      console.error('Erro ao buscar registros:', err);
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  };
+
+  const handleOpenModal = (server: Server) => {
+    setSelectedServer(server);
+    setSelectedWeeks([getCurrentWeekNumber()]);
+    setIsModalOpen(true);
+  };
+
+  const handleToggleWeek = (week: number) => {
+    setSelectedWeeks(prev =>
+      prev.includes(week)
+        ? prev.filter(w => w !== week)
+        : [...prev, week].sort((a, b) => a - b)
+    );
+  };
+
+  const handleEditRecord = (record: WeeklyRecordWithDetails) => {
+    setEditingRecord(record);
+    const data: Record<number, DailyEntry> = {};
+    for (let day = 1; day <= 6; day++) {
+      const entry = record.daily_entries.find(e => e.day_of_week === day);
+      data[day] = entry || { day_of_week: day, worked_days: 1, production: 0, status: 'Normal' };
+    }
+    setEditWeekData(data);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRecord) return;
+
+    setIsSaving(true);
+    try {
+      const daysToSave = [1, 2, 3, 4, 5];
+      if (editingRecord.saturday_active) daysToSave.push(6);
+
+      const entriesPromises = daysToSave.map(async (day) => {
+        const dayData = editWeekData[day];
+        const existingEntry = editingRecord.daily_entries.find(e => e.day_of_week === day);
+
+        const payload = {
+          weekly_record_id: editingRecord.id,
+          day_of_week: day,
+          worked_days: Number(dayData.worked_days),
+          production: Number(dayData.production) || 0,
+          status: dayData.status,
+          updated_at: new Date().toISOString()
+        };
+
+        if (existingEntry?.id) {
+          return (supabase.from('daily_entries') as any)
+            .update(payload)
+            .eq('id', existingEntry.id);
+        } else {
+          return (supabase.from('daily_entries') as any)
+            .insert(payload);
+        }
+      });
+
+      await Promise.all(entriesPromises);
+      alert('Registro atualizado com sucesso!');
+      setIsEditModalOpen(false);
+      fetchServerRecords();
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+      alert('Erro ao salvar alterações.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteRecord = async (record: WeeklyRecordWithDetails) => {
+    if (!window.confirm(`Excluir registro da Semana ${record.week_number}/${record.year}?\n\nEsta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    try {
+      // Excluir entradas diárias primeiro
+      await supabase.from('daily_entries').delete().eq('weekly_record_id', record.id);
+
+      // Excluir registro semanal
+      const { error } = await supabase.from('weekly_records').delete().eq('id', record.id);
+      if (error) throw error;
+
+      alert('Registro excluído com sucesso!');
+      fetchServerRecords();
+    } catch (err) {
+      console.error('Erro ao excluir:', err);
+      alert('Erro ao excluir registro.');
+    }
+  };
+
+  const getAvatarUrl = (server: Server) => {
+    if (server.avatar_url) return server.avatar_url;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=3b82f6&color=fff&size=100`;
+  };
+
+  const getStatusColor = (status: string | null) => {
+    switch (status) {
+      case 'active': return 'bg-emerald-500';
+      case 'vacation': return 'bg-amber-400';
+      case 'inactive': return 'bg-gray-400';
+      case 'leave':
+      case 'medical_leave': return 'bg-red-400';
+      default: return 'bg-slate-400';
+    }
+  };
+
+  const filteredServers = servers.filter(server =>
+    server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    server.matricula.includes(searchTerm)
+  );
+
+  // Renderizar card de servidor
+  const renderServerCard = (server: Server) => (
+    <div key={server.id} className="flex items-center gap-3 p-3 rounded-xl bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all group">
+      <div className="relative">
+        <div
+          className={`h-11 w-11 rounded-full bg-cover bg-center ${server.status === 'inactive' ? 'grayscale' : ''}`}
+          style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
+        />
+        <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1c2127] ${getStatusColor(server.status)}`} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-white truncate">{server.name}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
+          {server.vinculo && (
+            <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase border ${server.vinculo === 'Efetivo'
+              ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20'
+              : 'bg-blue-400/10 text-blue-400 border-blue-400/20'
+              }`}>
+              {server.vinculo}
+            </span>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => handleOpenModal(server)}
+        className="px-3 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-bold shadow-lg shadow-amber-500/20 hover:shadow-amber-500/40 hover:scale-105 transition-all flex items-center gap-1.5"
+      >
+        <span className="material-symbols-outlined text-sm">analytics</span>
+        Ver Relatório
+      </button>
+    </div>
+  );
+
+  // Renderizar célula de dia na tabela
+  const renderDayCell = (day: number, entry: DailyEntry | undefined) => {
+    if (!entry) return <td key={day} className="px-1 py-1 text-center"><span className="text-slate-600 text-[9px]">-</span></td>;
+    const statusInfo = statusColors[entry.status || 'Normal'] || statusColors['Normal'];
+    return (
+      <td key={day} className="px-1 py-1 text-center">
+        <div className="flex flex-col items-center gap-0.5">
+          <span className={`px-1 py-0.5 rounded text-[8px] font-bold ${statusInfo.bg} ${statusInfo.text}`} title={entry.status || 'Normal'}>
+            {statusInfo.abbrev}
+          </span>
+          {entry.production !== null && entry.production > 0 && (
+            <span className="text-[8px] text-slate-400">{entry.production}</span>
+          )}
+        </div>
+      </td>
+    );
+  };
+
+  return (
+    <div className="flex flex-col min-h-full pb-6 bg-background-dark">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-gradient-to-r from-[#101922] via-[#1c2127] to-[#101922] border-b border-gray-800/50 px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30">
+              <span className="material-symbols-outlined text-amber-500">analytics</span>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-white">Relatórios de Ponto</h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                Selecione um servidor para ver detalhes
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">
+            {filteredServers.length} servidores
+          </span>
+        </div>
+      </header>
+
+      <main className="flex-1 p-4 space-y-4">
+        {/* Busca */}
+        <div className="relative">
+          <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
+            <span className="material-symbols-outlined text-xl">search</span>
+          </span>
+          <input
+            className="block w-full rounded-xl border border-gray-800 bg-[#1c2127] py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary focus:border-primary shadow-sm transition-all"
+            placeholder="Buscar por nome ou matrícula..."
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Loading */}
+        {isLoadingServers && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="size-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-sm text-slate-500 font-medium">Carregando servidores...</p>
+          </div>
+        )}
+
+        {/* Lista Hierárquica */}
+        {!isLoadingServers && hierarchyData.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {hierarchyData.map((supGeral) => (
+              <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent overflow-hidden shadow-lg">
+                {/* Header Supervisor Geral */}
+                <div className="px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                    <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest">Supervisor Geral</p>
+                    <p className="text-sm font-bold text-white">{supGeral.name}</p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
+                    {supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0)} servidores
+                  </span>
+                </div>
+
+                {/* Supervisores de Área */}
+                <div className="p-3 space-y-3">
+                  {supGeral.supervisoresArea.map((supArea) => (
+                    <div key={supArea.id} className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden">
+                      {/* Header Supervisor de Área */}
+                      <div className="px-3 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/20">
+                          <span className="material-symbols-outlined text-emerald-400 text-lg">person</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-widest">Supervisor de Área</p>
+                          <p className="text-xs font-bold text-white">{supArea.name}</p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+                          {supArea.servidores.length}
+                        </span>
+                      </div>
+
+                      {/* Lista de Servidores */}
+                      <div className="p-2 space-y-2">
+                        {supArea.servidores
+                          .filter(server =>
+                            server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            server.matricula.includes(searchTerm)
+                          )
+                          .map((server) => renderServerCard(server))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoadingServers && filteredServers.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="p-4 rounded-2xl bg-[#1c2127] border border-gray-800">
+              <span className="material-symbols-outlined text-4xl text-slate-500">group_off</span>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-bold text-white">Nenhum servidor encontrado</p>
+              <p className="text-sm text-slate-500">Tente ajustar sua busca</p>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Modal de Detalhes do Servidor */}
+      {isModalOpen && selectedServer && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+          <div className="w-full max-w-2xl bg-[#101922] rounded-t-3xl sm:rounded-3xl border-t sm:border border-gray-800 max-h-[90vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gradient-to-r from-[#1c2127] to-[#252b33] rounded-t-3xl">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-12 w-12 rounded-full bg-cover bg-center ring-2 ring-primary/30"
+                  style={{ backgroundImage: `url('${getAvatarUrl(selectedServer)}')` }}
+                />
+                <div>
+                  <h2 className="text-base font-bold text-white">{selectedServer.name}</h2>
+                  <p className="text-[10px] text-slate-400">Mat: {selectedServer.matricula}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700 transition-colors">
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Seleção de Período */}
+              <div className="p-4 rounded-xl bg-gradient-to-r from-primary/10 to-blue-600/10 border border-primary/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-primary text-lg">date_range</span>
+                  <p className="text-xs font-bold text-primary uppercase tracking-wider">Período de Referência</p>
+                </div>
+
+                {/* Ano */}
+                <div className="mb-3">
+                  <label className="text-[9px] font-bold text-slate-500 uppercase">Ano</label>
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="w-full bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-2.5 text-white focus:ring-primary"
+                  >
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+
+                {/* Semanas (Checkboxes) */}
+                <div>
+                  <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">Semanas Epidemiológicas (selecione uma ou mais)</label>
+                  <div className="grid grid-cols-8 gap-1.5 max-h-32 overflow-y-auto p-2 bg-[#1c2127] rounded-lg border border-gray-700">
+                    {weeks.map(w => (
+                      <button
+                        key={w}
+                        onClick={() => handleToggleWeek(w)}
+                        className={`p-2 rounded-lg text-xs font-bold transition-all ${selectedWeeks.includes(w)
+                          ? 'bg-primary text-white shadow-lg'
+                          : 'bg-gray-800 text-slate-400 hover:bg-gray-700'
+                          }`}
+                      >
+                        {w.toString().padStart(2, '0')}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-1">{selectedWeeks.length} semana(s) selecionada(s)</p>
+                </div>
+              </div>
+
+              {/* Loading Records */}
+              {isLoadingRecords && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+
+              {/* Registros */}
+              {!isLoadingRecords && serverRecords.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <span className="material-symbols-outlined text-sm text-primary">table_chart</span>
+                    Registros das Semanas
+                  </h3>
+
+                  {serverRecords.map((record) => (
+                    <div key={record.id} className="rounded-xl border border-gray-700 bg-[#1c2127] overflow-hidden">
+                      {/* Header do Registro */}
+                      <div className="px-3 py-2 bg-gray-800/50 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-lg text-xs font-bold ${record.status === 'submitted'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                            Semana {record.week_number.toString().padStart(2, '0')}
+                          </span>
+                          {record.status === 'submitted' && (
+                            <span className="text-[8px] text-emerald-400">✓ Enviado</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleEditRecord(record)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-primary/20 hover:text-primary transition-colors"
+                            title="Editar"
+                          >
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRecord(record)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/20 hover:text-red-500 transition-colors"
+                            title="Excluir"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tabela de Dias */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-[#101922]/50">
+                              {dayNames.slice(1).map((day, idx) => (
+                                <th key={idx} className="px-2 py-2 text-center text-[8px] font-bold text-slate-400 uppercase">{day}</th>
+                              ))}
+                              <th className="px-2 py-2 text-center text-[8px] font-bold text-emerald-400 uppercase">Dias</th>
+                              <th className="px-2 py-2 text-center text-[8px] font-bold text-amber-400 uppercase">Prod.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              {[1, 2, 3, 4, 5, 6].map(day => renderDayCell(day, record.daily_entries.find(e => e.day_of_week === day)))}
+                              <td className="px-2 py-2 text-center">
+                                <span className="text-sm font-bold text-emerald-400">
+                                  {record.daily_entries.reduce((sum, e) => sum + (e.worked_days || 0), 0)}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2 text-center">
+                                <span className="text-sm font-bold text-amber-400">
+                                  {record.daily_entries.reduce((sum, e) => sum + (e.production || 0), 0)}
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty Records */}
+              {!isLoadingRecords && serverRecords.length === 0 && selectedWeeks.length > 0 && (
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <span className="material-symbols-outlined text-3xl text-slate-500">inbox</span>
+                  <p className="text-sm text-slate-500">Nenhum registro encontrado para as semanas selecionadas</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição */}
+      {isEditModalOpen && editingRecord && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-[#1c2127] rounded-2xl border border-gray-800 shadow-2xl overflow-hidden">
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
+              <h3 className="text-base font-bold text-white">Editar Semana {editingRecord.week_number}</h3>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-400 hover:text-white">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {[1, 2, 3, 4, 5, 6].map(day => {
+                if (day === 6 && !editingRecord.saturday_active) return null;
+                const data = editWeekData[day] || { worked_days: 0, production: 0, status: 'Normal' };
+                return (
+                  <div key={day} className="p-3 rounded-xl bg-[#101922] border border-gray-700 space-y-2">
+                    <p className="text-xs font-bold text-primary">{dayNames[day]}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[8px] text-slate-500 uppercase">Trabalhou</label>
+                        <input
+                          type="checkbox"
+                          checked={Number(data.worked_days) > 0}
+                          onChange={(e) => setEditWeekData(prev => ({
+                            ...prev,
+                            [day]: { ...prev[day], worked_days: e.target.checked ? 1 : 0 }
+                          }))}
+                          className="size-5 rounded border-gray-700 bg-[#1c2127] text-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] text-slate-500 uppercase">Produção</label>
+                        <input
+                          type="number"
+                          value={data.production || 0}
+                          onChange={(e) => setEditWeekData(prev => ({
+                            ...prev,
+                            [day]: { ...prev[day], production: parseInt(e.target.value) || 0 }
+                          }))}
+                          className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] text-slate-500 uppercase">Status</label>
+                        <select
+                          value={data.status || 'Normal'}
+                          onChange={(e) => setEditWeekData(prev => ({
+                            ...prev,
+                            [day]: { ...prev[day], status: e.target.value }
+                          }))}
+                          className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-[10px] p-2 text-white"
+                        >
+                          {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-4 border-t border-gray-800 flex gap-3">
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 py-3 rounded-xl border border-gray-700 text-white font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                className="flex-1 py-3 rounded-xl bg-primary text-white font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+              >
+                {isSaving ? (
+                  <>
+                    <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Reports;

@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-background-dark text-white font-display overflow-x-hidden m-0 p-0;
+  }
+}
+
+@theme {
+  --color-primary: #137fec;
+  --color-background-light: #f6f7f8;
+  --color-background-dark: #101922;
+  --color-surface-dark: #1c2127;
+  --color-border-dark: #3b4754;
+  --color-text-secondary: #9dabb9;
+
+  --font-display: "Public Sans", sans-serif;
+  --font-body: "Noto Sans", sans-serif;
+}
+
+/* Custom utilities */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

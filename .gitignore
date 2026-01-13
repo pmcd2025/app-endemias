@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Cache
+.cache/
