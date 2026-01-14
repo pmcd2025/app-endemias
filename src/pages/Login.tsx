@@ -9,6 +9,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +64,7 @@ const Login: React.FC = () => {
               </span>
               <input
                 className="flex h-14 w-full rounded-lg border border-[#3b4754] bg-[#1c2127] px-4 pl-11 text-base text-white placeholder:text-[#9dabb9] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="resumovetorial@gmail.com"
+                placeholder="Digite seu email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -81,13 +82,19 @@ const Login: React.FC = () => {
               <input
                 className="flex h-14 w-full rounded-lg border border-[#3b4754] bg-[#1c2127] px-4 pl-11 pr-12 text-base text-white placeholder:text-[#9dabb9] focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 placeholder="••••••••"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <button className="absolute right-4 flex items-center text-slate-400" type="button">
-                <span className="material-symbols-outlined text-[20px]">visibility</span>
+              <button
+                className="absolute right-4 flex items-center text-slate-400 hover:text-white transition-colors"
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                <span className="material-symbols-outlined text-[20px]">
+                  {showPassword ? "visibility_off" : "visibility"}
+                </span>
               </button>
             </div>
             <div className="mt-1 flex justify-end">

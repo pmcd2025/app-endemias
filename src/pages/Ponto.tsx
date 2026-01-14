@@ -38,6 +38,82 @@ const statusOptions = [
 
 const initialDayState: DiaRegistro = { worked_days: 1, producao: '', status: 'Normal' };
 
+// Componente DayRow movido para fora do componente Ponto para evitar re-criação
+interface DayRowProps {
+  dayNum: number;
+  label: string;
+  isActive?: boolean;
+  data: DiaRegistro;
+  onDayChange: (day: number, field: keyof DiaRegistro, value: any) => void;
+}
+
+const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, onDayChange }) => {
+  const handleProductionStep = (step: number) => {
+    const current = parseFloat(data.producao) || 0;
+    const next = Math.max(0, current + step);
+    onDayChange(dayNum, 'producao', next.toString());
+  };
+
+  return (
+    <div className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-800 bg-background-dark/50 ${!isActive ? 'opacity-40 pointer-events-none' : ''}`}>
+      <div className="flex justify-between items-center">
+        <span className="text-xs font-bold text-primary uppercase">{label}</span>
+      </div>
+      <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
+        <div className="flex flex-col gap-1 items-center justify-center min-w-[60px]">
+          <label className="text-[10px] text-slate-500 font-bold uppercase">Trabalhou?</label>
+          <input
+            type="checkbox"
+            disabled={data.status !== 'Normal'}
+            checked={Number(data.worked_days) > 0}
+            onChange={(e) => onDayChange(dayNum, 'worked_days', e.target.checked ? 1 : 0)}
+            className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary focus:ring-primary transition-all ${data.status !== 'Normal' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-slate-500 font-bold uppercase text-center">Produção</label>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleProductionStep(-1)}
+              className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">remove</span>
+            </button>
+            <input
+              type="number"
+              placeholder="0"
+              value={data.producao}
+              onChange={(e) => onDayChange(dayNum, 'producao', e.target.value)}
+              className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none"
+            />
+            <button
+              type="button"
+              onClick={() => handleProductionStep(1)}
+              className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">add</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
+          <select
+            value={data.status}
+            onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
+            className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none"
+          >
+            {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Ponto: React.FC = () => {
   const { userProfile } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,6 +147,7 @@ const Ponto: React.FC = () => {
     6: { ...initialDayState },
   });
   const [weeklyRecordId, setWeeklyRecordId] = useState<string | null>(null);
+  const [observacao, setObservacao] = useState('');
 
   const years = Array.from({ length: 6 }, (_, i) => (2025 + i).toString());
   const weeks = Array.from({ length: 52 }, (_, i) => (i + 1).toString().padStart(2, '0'));
@@ -287,6 +364,7 @@ const Ponto: React.FC = () => {
     });
     setWeeklyRecordId(null);
     setIsSaturdayActive(false);
+    setObservacao('');
 
     try {
       const { data: record, error } = await supabase
@@ -294,6 +372,7 @@ const Ponto: React.FC = () => {
         .select(`
           id,
           saturday_active,
+          notes,
           daily_entries (
             day_of_week,
             worked_days,
@@ -315,6 +394,7 @@ const Ponto: React.FC = () => {
         const typedRecord = record as unknown as WeeklyRecordWithEntries;
         setWeeklyRecordId(typedRecord.id);
         setIsSaturdayActive(typedRecord.saturday_active || false);
+        setObservacao((record as any).notes || '');
 
         const newWeekData = { ...weekData };
         if (typedRecord.daily_entries) {
@@ -373,6 +453,7 @@ const Ponto: React.FC = () => {
         year: selectedYear,
         week_number: selectedWeek,
         saturday_active: isSaturdayActive,
+        notes: observacao.slice(0, 800), // Limite de 800 caracteres
         updated_at: new Date().toISOString()
       };
 
@@ -462,75 +543,6 @@ const Ponto: React.FC = () => {
     server.matricula.includes(searchTerm)
   );
 
-  const DayRow = ({ dayNum, label, isActive = true }: { dayNum: number, label: string, isActive?: boolean }) => {
-    const data = weekData[dayNum];
-
-    const handleProductionStep = (step: number) => {
-      const current = parseFloat(data.producao) || 0;
-      const next = Math.max(0, current + step);
-      handleDayChange(dayNum, 'producao', next.toString());
-    };
-
-    return (
-      <div className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-800 bg-background-dark/50 ${!isActive ? 'opacity-40 pointer-events-none' : ''}`}>
-        <div className="flex justify-between items-center">
-          <span className="text-xs font-bold text-primary uppercase">{label}</span>
-        </div>
-        <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
-          <div className="flex flex-col gap-1 items-center justify-center min-w-[60px]">
-            <label className="text-[10px] text-slate-500 font-bold uppercase">Trabalhou?</label>
-            <input
-              type="checkbox"
-              disabled={data.status !== 'Normal'}
-              checked={Number(data.worked_days) > 0}
-              onChange={(e) => handleDayChange(dayNum, 'worked_days', e.target.checked ? 1 : 0)}
-              className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary focus:ring-primary transition-all ${data.status !== 'Normal' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                }`}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-slate-500 font-bold uppercase text-center">Produção</label>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => handleProductionStep(-1)}
-                className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">remove</span>
-              </button>
-              <input
-                type="number"
-                placeholder="0"
-                value={data.producao}
-                onChange={(e) => handleDayChange(dayNum, 'producao', e.target.value)}
-                className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none"
-              />
-              <button
-                type="button"
-                onClick={() => handleProductionStep(1)}
-                className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">add</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
-            <select
-              value={data.status}
-              onChange={(e) => handleDayChange(dayNum, 'status', e.target.value)}
-              className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none"
-            >
-              {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // Componente do card de servidor para registro
   const ServerCard = ({ server }: { server: Server }) => (
     <div className="flex items-center gap-3 p-3 rounded-xl bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all group">
@@ -559,8 +571,8 @@ const Ponto: React.FC = () => {
         onClick={() => handleOpenModal(server)}
         disabled={isWeekSubmitted}
         className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${isWeekSubmitted
-            ? 'bg-gray-600 text-slate-400 cursor-not-allowed'
-            : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
+          ? 'bg-gray-600 text-slate-400 cursor-not-allowed'
+          : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
           }`}
         title={isWeekSubmitted ? 'Semana já enviada - não é possível editar' : 'Registrar ponto'}
       >
@@ -855,11 +867,11 @@ const Ponto: React.FC = () => {
 
               {/* Dias da Semana */}
               <div className="space-y-3">
-                <DayRow dayNum={1} label="Segunda-feira" />
-                <DayRow dayNum={2} label="Terça-feira" />
-                <DayRow dayNum={3} label="Quarta-feira" />
-                <DayRow dayNum={4} label="Quinta-feira" />
-                <DayRow dayNum={5} label="Sexta-feira" />
+                <DayRow dayNum={1} label="Segunda-feira" data={weekData[1]} onDayChange={handleDayChange} />
+                <DayRow dayNum={2} label="Terça-feira" data={weekData[2]} onDayChange={handleDayChange} />
+                <DayRow dayNum={3} label="Quarta-feira" data={weekData[3]} onDayChange={handleDayChange} />
+                <DayRow dayNum={4} label="Quinta-feira" data={weekData[4]} onDayChange={handleDayChange} />
+                <DayRow dayNum={5} label="Sexta-feira" data={weekData[5]} onDayChange={handleDayChange} />
 
                 {/* Sábado Opcional */}
                 <div className="pt-3 border-t border-gray-800">
@@ -875,8 +887,29 @@ const Ponto: React.FC = () => {
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSaturdayActive ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                   </div>
-                  <DayRow dayNum={6} label="Sábado" isActive={isSaturdayActive} />
+                  <DayRow dayNum={6} label="Sábado" isActive={isSaturdayActive} data={weekData[6]} onDayChange={handleDayChange} />
                 </div>
+              </div>
+
+              {/* Campo de Observação */}
+              <div className="p-3 rounded-xl bg-gradient-to-r from-slate-800/50 to-slate-700/30 border border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-slate-400 text-lg">notes</span>
+                    <p className="text-xs font-bold text-slate-300 uppercase tracking-wider">Observação</p>
+                  </div>
+                  <span className={`text-xs font-bold ${observacao.length > 750 ? 'text-amber-400' : observacao.length >= 800 ? 'text-red-400' : 'text-slate-500'}`}>
+                    {observacao.length}/800
+                  </span>
+                </div>
+                <textarea
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value.slice(0, 800))}
+                  placeholder="Digite observações sobre o registro desta semana (opcional)..."
+                  maxLength={800}
+                  rows={3}
+                  className="w-full bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-3 text-white placeholder:text-slate-500 focus:ring-primary focus:border-primary resize-none"
+                />
               </div>
             </div>
 

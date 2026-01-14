@@ -75,6 +75,16 @@ const Reports: React.FC = () => {
   const [editWeekData, setEditWeekData] = useState<Record<number, DailyEntry>>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // Estado para visualização detalhada (expandir/colapsar semanas)
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
+  const [serverStats, setServerStats] = useState<{
+    totalDays: number;
+    totalProduction: number;
+    totalFaltas: number;
+    totalFerias: number;
+    weeksCount: number;
+  } | null>(null);
+
   const years = Array.from({ length: 6 }, (_, i) => (2025 + i));
   const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
 
@@ -228,6 +238,33 @@ const Reports: React.FC = () => {
         daily_entries: r.daily_entries || []
       }));
 
+      // Calcular estatísticas resumidas
+      let totalDays = 0;
+      let totalProduction = 0;
+      let totalFaltas = 0;
+      let totalFerias = 0;
+
+      records.forEach(record => {
+        record.daily_entries.forEach(entry => {
+          totalDays += entry.worked_days || 0;
+          totalProduction += entry.production || 0;
+          if (entry.status === 'Falta Justificada' || entry.status === 'Falta Sem Justificativa') {
+            totalFaltas++;
+          }
+          if (entry.status === 'Férias') {
+            totalFerias++;
+          }
+        });
+      });
+
+      setServerStats({
+        totalDays,
+        totalProduction,
+        totalFaltas,
+        totalFerias,
+        weeksCount: records.length
+      });
+
       setServerRecords(records);
     } catch (err) {
       console.error('Erro ao buscar registros:', err);
@@ -239,7 +276,22 @@ const Reports: React.FC = () => {
   const handleOpenModal = (server: Server) => {
     setSelectedServer(server);
     setSelectedWeeks([getCurrentWeekNumber()]);
+    setExpandedWeeks(new Set());
+    setServerStats(null);
     setIsModalOpen(true);
+  };
+
+  // Função para expandir/colapsar detalhes da semana
+  const toggleWeekExpanded = (weekId: string) => {
+    setExpandedWeeks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(weekId)) {
+        newSet.delete(weekId);
+      } else {
+        newSet.add(weekId);
+      }
+      return newSet;
+    });
   };
 
   const handleToggleWeek = (week: number) => {
@@ -580,78 +632,187 @@ const Reports: React.FC = () => {
                 </div>
               )}
 
+              {/* Cards de Estatísticas Resumidas */}
+              {!isLoadingRecords && serverStats && serverRecords.length > 0 && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-[#1c2127] to-[#252b33] border border-gray-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-amber-400">insights</span>
+                    <p className="text-xs font-bold text-white uppercase tracking-wider">Resumo do Período</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {/* Total de Dias Trabalhados */}
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-emerald-400 text-lg">work</span>
+                        <p className="text-[9px] text-emerald-400 font-bold uppercase">Dias Trab.</p>
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-400">{serverStats.totalDays}</p>
+                    </div>
+                    {/* Produção Total */}
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-amber-400 text-lg">pest_control</span>
+                        <p className="text-[9px] text-amber-400 font-bold uppercase">Produção</p>
+                      </div>
+                      <p className="text-2xl font-bold text-amber-400">{serverStats.totalProduction}</p>
+                    </div>
+                    {/* Total de Faltas */}
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-red-400 text-lg">event_busy</span>
+                        <p className="text-[9px] text-red-400 font-bold uppercase">Faltas</p>
+                      </div>
+                      <p className="text-2xl font-bold text-red-400">{serverStats.totalFaltas}</p>
+                    </div>
+                    {/* Total de Férias */}
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="material-symbols-outlined text-blue-400 text-lg">beach_access</span>
+                        <p className="text-[9px] text-blue-400 font-bold uppercase">Férias</p>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-400">{serverStats.totalFerias}</p>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-2 text-center">
+                    Dados de {serverStats.weeksCount} semana(s) selecionada(s)
+                  </p>
+                </div>
+              )}
+
               {/* Registros */}
               {!isLoadingRecords && serverRecords.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                     <span className="material-symbols-outlined text-sm text-primary">table_chart</span>
                     Registros das Semanas
+                    <span className="text-[9px] text-slate-500 font-normal ml-auto">Clique para expandir detalhes</span>
                   </h3>
 
-                  {serverRecords.map((record) => (
-                    <div key={record.id} className="rounded-xl border border-gray-700 bg-[#1c2127] overflow-hidden">
-                      {/* Header do Registro */}
-                      <div className="px-3 py-2 bg-gray-800/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-lg text-xs font-bold ${record.status === 'submitted'
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-amber-500/20 text-amber-400'
-                            }`}>
-                            Semana {record.week_number.toString().padStart(2, '0')}
-                          </span>
-                          {record.status === 'submitted' && (
-                            <span className="text-[8px] text-emerald-400">✓ Enviado</span>
-                          )}
+                  {serverRecords.map((record) => {
+                    const isExpanded = expandedWeeks.has(record.id);
+                    return (
+                      <div key={record.id} className="rounded-xl border border-gray-700 bg-[#1c2127] overflow-hidden">
+                        {/* Header do Registro - Clicável para expandir */}
+                        <div
+                          onClick={() => toggleWeekExpanded(record.id)}
+                          className="px-3 py-2 bg-gray-800/50 flex items-center justify-between cursor-pointer hover:bg-gray-800/80 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`material-symbols-outlined text-sm text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
+                              chevron_right
+                            </span>
+                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${record.status === 'submitted'
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : 'bg-amber-500/20 text-amber-400'
+                              }`}>
+                              Semana {record.week_number.toString().padStart(2, '0')}
+                            </span>
+                            {record.status === 'submitted' && (
+                              <span className="text-[8px] text-emerald-400">✓ Enviado</span>
+                            )}
+                            {/* Resumo rápido */}
+                            <div className="flex items-center gap-2 ml-2">
+                              <span className="text-[9px] text-emerald-400 flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[12px]">work</span>
+                                {record.daily_entries.reduce((sum, e) => sum + (e.worked_days || 0), 0)}d
+                              </span>
+                              <span className="text-[9px] text-amber-400 flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[12px]">pest_control</span>
+                                {record.daily_entries.reduce((sum, e) => sum + (e.production || 0), 0)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleEditRecord(record)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-primary/20 hover:text-primary transition-colors"
+                              title="Editar"
+                            >
+                              <span className="material-symbols-outlined text-sm">edit</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRecord(record)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/20 hover:text-red-500 transition-colors"
+                              title="Excluir"
+                            >
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleEditRecord(record)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:bg-primary/20 hover:text-primary transition-colors"
-                            title="Editar"
-                          >
-                            <span className="material-symbols-outlined text-sm">edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteRecord(record)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:bg-red-500/20 hover:text-red-500 transition-colors"
-                            title="Excluir"
-                          >
-                            <span className="material-symbols-outlined text-sm">delete</span>
-                          </button>
-                        </div>
-                      </div>
 
-                      {/* Tabela de Dias */}
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-[#101922]/50">
-                              {dayNames.slice(1).map((day, idx) => (
-                                <th key={idx} className="px-2 py-2 text-center text-[8px] font-bold text-slate-400 uppercase">{day}</th>
-                              ))}
-                              <th className="px-2 py-2 text-center text-[8px] font-bold text-emerald-400 uppercase">Dias</th>
-                              <th className="px-2 py-2 text-center text-[8px] font-bold text-amber-400 uppercase">Prod.</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              {[1, 2, 3, 4, 5, 6].map(day => renderDayCell(day, record.daily_entries.find(e => e.day_of_week === day)))}
-                              <td className="px-2 py-2 text-center">
-                                <span className="text-sm font-bold text-emerald-400">
-                                  {record.daily_entries.reduce((sum, e) => sum + (e.worked_days || 0), 0)}
-                                </span>
-                              </td>
-                              <td className="px-2 py-2 text-center">
-                                <span className="text-sm font-bold text-amber-400">
-                                  {record.daily_entries.reduce((sum, e) => sum + (e.production || 0), 0)}
-                                </span>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                        {/* Tabela de Dias - Sempre visível */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-[#101922]/50">
+                                {dayNames.slice(1).map((day, idx) => (
+                                  <th key={idx} className="px-2 py-2 text-center text-[8px] font-bold text-slate-400 uppercase">{day}</th>
+                                ))}
+                                <th className="px-2 py-2 text-center text-[8px] font-bold text-emerald-400 uppercase">Dias</th>
+                                <th className="px-2 py-2 text-center text-[8px] font-bold text-amber-400 uppercase">Prod.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                {[1, 2, 3, 4, 5, 6].map(day => renderDayCell(day, record.daily_entries.find(e => e.day_of_week === day)))}
+                                <td className="px-2 py-2 text-center">
+                                  <span className="text-sm font-bold text-emerald-400">
+                                    {record.daily_entries.reduce((sum, e) => sum + (e.worked_days || 0), 0)}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-2 text-center">
+                                  <span className="text-sm font-bold text-amber-400">
+                                    {record.daily_entries.reduce((sum, e) => sum + (e.production || 0), 0)}
+                                  </span>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Detalhes Expandidos de Cada Dia */}
+                        {isExpanded && (
+                          <div className="px-3 pb-3 pt-1 border-t border-gray-700/50 bg-[#101922]/30">
+                            <p className="text-[9px] text-slate-400 uppercase font-bold mb-2 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">calendar_month</span>
+                              Detalhes por Dia
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[1, 2, 3, 4, 5, 6].map(day => {
+                                const entry = record.daily_entries.find(e => e.day_of_week === day);
+                                if (!entry && day === 6 && !record.saturday_active) return null;
+                                const status = entry?.status || '-';
+                                const statusInfo = statusColors[status] || { bg: 'bg-gray-500/20', text: 'text-slate-400', abbrev: '-' };
+
+                                return (
+                                  <div key={day} className="p-2 rounded-lg bg-[#1c2127] border border-gray-700/50">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] font-bold text-primary">{dayNames[day]}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${statusInfo.bg} ${statusInfo.text}`}>
+                                        {status}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[9px]">
+                                      <div className="flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-[10px] text-emerald-400">work</span>
+                                        <span className="text-slate-400">Dias:</span>
+                                        <span className="font-bold text-emerald-400">{entry?.worked_days ?? 0}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-[10px] text-amber-400">pest_control</span>
+                                        <span className="text-slate-400">Prod:</span>
+                                        <span className="font-bold text-amber-400">{entry?.production ?? 0}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
