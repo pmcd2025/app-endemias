@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import SupervisorsModal from '../components/SupervisorsModal';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { getEpidemiologicalWeek } from '../utils/dateUtils';
 
 interface DashboardStats {
   serversCount: number;
@@ -360,12 +361,10 @@ const Dashboard: React.FC = () => {
         const server = serversData.find((s: any) => s.id === absence.server_id);
         const startDate = new Date(absence.start_date);
 
-        // Calcular semana epidemiológica
-        const d = new Date(startDate);
-        d.setHours(0, 0, 0, 0);
-        d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
-        const week1 = new Date(d.getFullYear(), 0, 4);
-        const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+
+
+        // Calcular semana epidemiológica usando utilitário
+        const weekNum = getEpidemiologicalWeek(startDate);
 
         return {
           id: absence.id,
@@ -395,13 +394,7 @@ const Dashboard: React.FC = () => {
     setIsAtestadosModalOpen(true);
   };
 
-  function getCurrentWeekNumber() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
-    const week1 = new Date(d.getFullYear(), 0, 4);
-    return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
-  }
+
 
   if (authLoading) {
     return (
@@ -711,7 +704,7 @@ const Dashboard: React.FC = () => {
             <span className="material-symbols-outlined text-2xl">summarize</span>
           </div>
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Semana Atual</p>
-          <p className="text-2xl font-bold text-white">Sem. {getCurrentWeekNumber()}</p>
+          <p className="text-2xl font-bold text-white">Sem. {getEpidemiologicalWeek()}</p>
         </div>
       </section>
 
