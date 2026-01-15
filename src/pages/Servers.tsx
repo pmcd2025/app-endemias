@@ -303,28 +303,45 @@ const Servers: React.FC = () => {
 
   const handleUpdateServer = async (updatedServer: Server) => {
     try {
+      // Ensure empty strings are converted to null to avoid UUID syntax errors
       const updatePayload: UpdateTables<'servers'> = {
         name: updatedServer.name,
+        matricula: updatedServer.matricula,
         role: updatedServer.role,
         status: updatedServer.status,
         vinculo: updatedServer.vinculo,
-        supervisor_geral_id: updatedServer.supervisor_geral_id,
-        supervisor_area_id: updatedServer.supervisor_area_id
+        supervisor_geral_id: updatedServer.supervisor_geral_id || null,
+        supervisor_area_id: updatedServer.supervisor_area_id || null
       };
 
-      const { error } = await (supabase.from('servers') as any)
-        .update(updatePayload)
-        .eq('id', updatedServer.id);
+      console.log('Updating server ID:', updatedServer.id);
+      console.log('Updating server with payload:', updatePayload);
 
-      if (error) throw error;
+      const { data, error } = await (supabase.from('servers') as any)
+        .update(updatePayload)
+        .eq('id', updatedServer.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (!data) {
+        console.error('No data returned from update - row may not exist or RLS blocked');
+        throw new Error('Nenhum dado retornado. O servidor pode não existir ou você não tem permissão para editá-lo.');
+      }
+
+      console.log('Update successful, returned data:', data);
 
       // Recarregar os dados para atualizar tanto a lista quanto a hierarquia
-      // Isso é crucial se os supervisores mudaram
-      fetchServers();
+      await fetchServers();
       setEditingServer(null);
-    } catch (err) {
+      alert('Servidor atualizado com sucesso!');
+    } catch (err: any) {
       console.error('Erro ao atualizar:', err);
-      alert('Erro ao atualizar servidor.');
+      alert(`Erro ao atualizar servidor: ${err.message || 'Erro desconhecido'}`);
     }
   };
 

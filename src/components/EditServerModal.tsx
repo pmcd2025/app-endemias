@@ -39,7 +39,7 @@ const EditServerModal: React.FC<EditServerModalProps> = ({ isOpen, onClose, serv
         }
     };
 
-    const handleSupervisorGeralChange = (id: string) => {
+    const handleSupervisorGeralChange = (id: string | null) => {
         setFormData(prev => ({ ...prev, supervisor_geral_id: id, supervisor_area_id: null })); // Reset area supervisor
         if (id) {
             fetchSupervisoresArea(id);
@@ -147,7 +147,7 @@ const EditServerModal: React.FC<EditServerModalProps> = ({ isOpen, onClose, serv
                         <label className="text-xs font-medium text-slate-400">Supervisor Geral</label>
                         <select
                             value={formData.supervisor_geral_id || ''}
-                            onChange={(e) => handleSupervisorGeralChange(e.target.value)}
+                            onChange={(e) => handleSupervisorGeralChange(e.target.value || null)}
                             className="w-full bg-black/20 border border-gray-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all [&>option]:bg-[#1c2127]"
                         >
                             <option value="">Selecione...</option>
@@ -162,7 +162,7 @@ const EditServerModal: React.FC<EditServerModalProps> = ({ isOpen, onClose, serv
                         <label className="text-xs font-medium text-slate-400">Supervisor de Área</label>
                         <select
                             value={formData.supervisor_area_id || ''}
-                            onChange={(e) => setFormData({ ...formData, supervisor_area_id: e.target.value })}
+                            onChange={(e) => setFormData({ ...formData, supervisor_area_id: e.target.value || null })}
                             disabled={!formData.supervisor_geral_id}
                             className="w-full bg-black/20 border border-gray-800 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all [&>option]:bg-[#1c2127] disabled:opacity-50"
                         >

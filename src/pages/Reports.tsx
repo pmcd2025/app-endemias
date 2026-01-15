@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Tables, InsertTables } from '../lib/database.types';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 type Server = Tables<'servers'>;
 
@@ -90,6 +93,13 @@ const Reports: React.FC = () => {
     totalFerias: number;
     weeksCount: number;
   } | null>(null);
+
+  // Estados para exportação em lote
+  const [isBatchExportModalOpen, setIsBatchExportModalOpen] = useState(false);
+  const [batchExportYear, setBatchExportYear] = useState(new Date().getFullYear());
+  const [batchExportWeeks, setBatchExportWeeks] = useState<number[]>([getCurrentWeekNumber()]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [selectedServersForExport, setSelectedServersForExport] = useState<string[]>([]);
 
   const years = Array.from({ length: 6 }, (_, i) => (2025 + i));
   const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
@@ -276,6 +286,315 @@ const Reports: React.FC = () => {
       console.error('Erro ao buscar registros:', err);
     } finally {
       setIsLoadingRecords(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (!selectedServer || serverRecords.length === 0) return;
+
+    const doc = new jsPDF();
+
+    // Cabeçalho
+    doc.setFontSize(16);
+    doc.text('Relatório de Ponto - Endemias', 14, 20);
+
+    doc.setFontSize(10);
+    doc.text(`Servidor: ${selectedServer.name}`, 14, 30);
+    doc.text(`Matrícula: ${selectedServer.matricula}`, 14, 35);
+    doc.text(`Período: ${selectedWeeks.join(', ')} / ${selectedYear}`, 14, 40);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString()}`, 14, 45);
+
+    // Tabela
+    const tableBody = serverRecords.flatMap(record => {
+      const rows = [];
+      // Linha de cabeçalho da semana
+      rows.push([{ content: `Semana ${record.week_number} - Status: ${record.status || 'Pendente'}`, colSpan: 4, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
+
+      // Detalhes diários
+      const days = [1, 2, 3, 4, 5];
+      if (record.saturday_active) days.push(6);
+
+      days.forEach(day => {
+        const entry = record.daily_entries.find(e => e.day_of_week === day);
+        rows.push([
+          dayNames[day],
+          entry?.status || '-',
+          entry?.worked_days || 0,
+          entry?.production || 0
+        ]);
+      });
+
+      return rows;
+    });
+
+    autoTable(doc, {
+      startY: 55,
+      head: [['Dia', 'Status', 'Dias Trab.', 'Produção']],
+      body: tableBody,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+      styles: { fontSize: 8 },
+      alternateRowStyles: { fillColor: [250, 250, 250] }
+    });
+
+    doc.save(`relatorio_${selectedServer.name.replace(/\s+/g, '_')}_${selectedYear}.pdf`);
+  };
+
+  const handleExportExcel = () => {
+    if (!selectedServer || serverRecords.length === 0) return;
+
+    // Preparar dados para o Excel
+    const data: any[] = [];
+
+    serverRecords.forEach(record => {
+      const days = [1, 2, 3, 4, 5];
+      if (record.saturday_active) days.push(6);
+
+      days.forEach(day => {
+        const entry = record.daily_entries.find(e => e.day_of_week === day);
+        data.push({
+          'Semana': record.week_number,
+          'Ano': record.year,
+          'Servidor': selectedServer.name,
+          'Matrícula': selectedServer.matricula,
+          'Dia': dayNames[day],
+          'Status': entry?.status || 'Não Registrado',
+          'Dias Trabalhados': entry?.worked_days || 0,
+          'Produção': entry?.production || 0,
+          'Observação da Semana': (record as any).notes || ''
+        });
+      });
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatório');
+
+    // Ajustar largura das colunas
+    const wscols = [
+      { wch: 8 }, // Semana
+      { wch: 6 }, // Ano
+      { wch: 30 }, // Servidor
+      { wch: 15 }, // Matrícula
+      { wch: 15 }, // Dia
+      { wch: 20 }, // Status
+      { wch: 15 }, // Dias Trab.
+      { wch: 10 }, // Produção
+      { wch: 40 } // Obs
+    ];
+    worksheet['!cols'] = wscols;
+
+    XLSX.writeFile(workbook, `relatorio_${selectedServer.name.replace(/\s+/g, '_')}_${selectedYear}.xlsx`);
+  };
+
+  // Função para buscar registros de múltiplos servidores
+  const fetchBatchRecords = async (serverIds: string[], weeksToFetch: number[], year: number) => {
+    const allRecords: { server: Server; records: WeeklyRecordWithDetails[] }[] = [];
+
+    for (const serverId of serverIds) {
+      const server = servers.find(s => s.id === serverId);
+      if (!server) continue;
+
+      const { data: weeklyRecords, error } = await supabase
+        .from('weekly_records')
+        .select('*')
+        .eq('server_id', serverId)
+        .eq('year', year)
+        .in('week_number', weeksToFetch)
+        .order('week_number', { ascending: true });
+
+      if (error) {
+        console.error(`Error fetching records for server ${serverId}:`, error);
+        continue;
+      }
+
+      const recordsWithEntries: WeeklyRecordWithDetails[] = [];
+      for (const record of weeklyRecords || []) {
+        const { data: entries } = await supabase
+          .from('daily_entries')
+          .select('*')
+          .eq('weekly_record_id', record.id);
+
+        recordsWithEntries.push({
+          ...record,
+          daily_entries: entries || []
+        });
+      }
+
+      allRecords.push({ server, records: recordsWithEntries });
+    }
+
+    return allRecords;
+  };
+
+  // Exportar PDF em lote
+  const handleBatchExportPDF = async () => {
+    if (servers.length === 0) return;
+    setIsExporting(true);
+
+    try {
+      // Usar servidores selecionados ou todos se nenhum foi selecionado
+      const serverIds = selectedServersForExport.length > 0
+        ? selectedServersForExport
+        : servers.map(s => s.id);
+      const allData = await fetchBatchRecords(serverIds, batchExportWeeks, batchExportYear);
+
+      const doc = new jsPDF();
+
+      // Capa
+      doc.setFontSize(20);
+      doc.text('Relatório Consolidado de Ponto', 14, 30);
+      doc.setFontSize(12);
+      doc.text(`Período: Semanas ${batchExportWeeks.join(', ')} / ${batchExportYear}`, 14, 45);
+      doc.text(`Total de Servidores: ${allData.length}`, 14, 55);
+      doc.text(`Data de Emissão: ${new Date().toLocaleDateString()}`, 14, 65);
+      if (userProfile) {
+        doc.text(`Emitido por: ${userProfile.name}`, 14, 75);
+      }
+
+      let currentY = 90;
+
+      for (const { server, records } of allData) {
+        // Verificar se precisa de nova página
+        if (currentY > 250) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        // Cabeçalho do servidor
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${server.name} - Mat: ${server.matricula}`, 14, currentY);
+        currentY += 8;
+
+        if (records.length === 0) {
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          doc.text('Nenhum registro encontrado para o período.', 14, currentY);
+          currentY += 15;
+          continue;
+        }
+
+        // Tabela de registros
+        const tableBody = records.flatMap(record => {
+          const rows: any[] = [];
+          rows.push([{ content: `Semana ${record.week_number}`, colSpan: 4, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
+
+          const days = [1, 2, 3, 4, 5];
+          if (record.saturday_active) days.push(6);
+
+          days.forEach(day => {
+            const entry = record.daily_entries.find(e => e.day_of_week === day);
+            rows.push([
+              dayNames[day],
+              entry?.status || '-',
+              entry?.worked_days || 0,
+              entry?.production || 0
+            ]);
+          });
+
+          return rows;
+        });
+
+        autoTable(doc, {
+          startY: currentY,
+          head: [['Dia', 'Status', 'Dias', 'Prod.']],
+          body: tableBody,
+          theme: 'grid',
+          headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 8 },
+          styles: { fontSize: 7 },
+          margin: { left: 14 }
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 15;
+      }
+
+      doc.save(`relatorio_consolidado_${batchExportYear}.pdf`);
+      setIsBatchExportModalOpen(false);
+    } catch (error) {
+      console.error('Error generating batch PDF:', error);
+      alert('Erro ao gerar PDF. Tente novamente.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Exportar Excel em lote
+  const handleBatchExportExcel = async () => {
+    if (servers.length === 0) return;
+    setIsExporting(true);
+
+    try {
+      // Usar servidores selecionados ou todos se nenhum foi selecionado
+      const serverIds = selectedServersForExport.length > 0
+        ? selectedServersForExport
+        : servers.map(s => s.id);
+      const allData = await fetchBatchRecords(serverIds, batchExportWeeks, batchExportYear);
+
+      const data: any[] = [];
+
+      for (const { server, records } of allData) {
+        for (const record of records) {
+          const days = [1, 2, 3, 4, 5];
+          if (record.saturday_active) days.push(6);
+
+          days.forEach(day => {
+            const entry = record.daily_entries.find(e => e.day_of_week === day);
+            data.push({
+              'Servidor': server.name,
+              'Matrícula': server.matricula,
+              'Função': server.role,
+              'Semana': record.week_number,
+              'Ano': record.year,
+              'Dia': dayNames[day],
+              'Status': entry?.status || 'Não Registrado',
+              'Dias Trabalhados': entry?.worked_days || 0,
+              'Produção': entry?.production || 0
+            });
+          });
+        }
+      }
+
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatório Consolidado');
+
+      const wscols = [
+        { wch: 30 }, { wch: 12 }, { wch: 20 }, { wch: 8 },
+        { wch: 6 }, { wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 10 }
+      ];
+      worksheet['!cols'] = wscols;
+
+      XLSX.writeFile(workbook, `relatorio_consolidado_${batchExportYear}.xlsx`);
+      setIsBatchExportModalOpen(false);
+    } catch (error) {
+      console.error('Error generating batch Excel:', error);
+      alert('Erro ao gerar Excel. Tente novamente.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Toggle week for batch export
+  const handleToggleBatchWeek = (week: number) => {
+    setBatchExportWeeks(prev =>
+      prev.includes(week) ? prev.filter(w => w !== week) : [...prev, week].sort((a, b) => a - b)
+    );
+  };
+
+  // Toggle server for batch export
+  const handleToggleServerForExport = (serverId: string) => {
+    setSelectedServersForExport(prev =>
+      prev.includes(serverId) ? prev.filter(id => id !== serverId) : [...prev, serverId]
+    );
+  };
+
+  // Select/Deselect all servers
+  const handleSelectAllServers = () => {
+    if (selectedServersForExport.length === servers.length) {
+      setSelectedServersForExport([]);
+    } else {
+      setSelectedServersForExport(servers.map(s => s.id));
     }
   };
 
@@ -494,9 +813,21 @@ const Reports: React.FC = () => {
               </p>
             </div>
           </div>
-          <span className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">
-            {filteredServers.length} servidores
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Botões de exportação em lote */}
+            {userProfile && (
+              <button
+                onClick={() => setIsBatchExportModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-[10px] font-bold"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Exportar Todos
+              </button>
+            )}
+            <span className="px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[10px] font-bold border border-primary/20">
+              {filteredServers.length} servidores
+            </span>
+          </div>
         </div>
       </header>
 
@@ -660,13 +991,36 @@ const Reports: React.FC = () => {
                 </div>
               )}
 
+
               {/* Cards de Estatísticas Resumidas */}
               {!isLoadingRecords && serverStats && serverRecords.length > 0 && (
                 <div className="p-4 rounded-xl bg-gradient-to-r from-[#1c2127] to-[#252b33] border border-gray-700">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-amber-400">insights</span>
-                    <p className="text-xs font-bold text-white uppercase tracking-wider">Resumo do Período</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-amber-400">insights</span>
+                      <p className="text-xs font-bold text-white uppercase tracking-wider">Resumo do Período</p>
+                    </div>
+                    {/* Botões de Exportação */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleExportPDF}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold"
+                        title="Exportar para PDF"
+                      >
+                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                        PDF
+                      </button>
+                      <button
+                        onClick={handleExportExcel}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 transition-all text-[10px] font-bold"
+                        title="Exportar para Excel"
+                      >
+                        <span className="material-symbols-outlined text-sm">table_view</span>
+                        Excel
+                      </button>
+                    </div>
                   </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {/* Total de Dias Trabalhados */}
                     <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
@@ -995,6 +1349,146 @@ const Reports: React.FC = () => {
                   {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exportação em Lote */}
+      {isBatchExportModalOpen && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-[#101922] rounded-2xl border border-gray-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gradient-to-r from-[#1c2127] to-[#252b33]">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-500/30">
+                  <span className="material-symbols-outlined text-amber-400">download</span>
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Exportar Relatório em Lote</h2>
+                  <p className="text-[10px] text-slate-400">{servers.length} servidores disponíveis</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBatchExportModalOpen(false)}
+                className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* Ano */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Ano</label>
+                <select
+                  value={batchExportYear}
+                  onChange={(e) => setBatchExportYear(parseInt(e.target.value))}
+                  className="w-full bg-[#1c2127] border border-gray-700 rounded-xl text-sm p-3 text-white focus:ring-primary [&>option]:bg-[#1c2127]"
+                >
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              {/* Semanas */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Semanas Epidemiológicas ({batchExportWeeks.length} selecionada(s))
+                </label>
+                <div className="grid grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-2 bg-[#1c2127] rounded-xl border border-gray-700">
+                  {weeks.map(w => (
+                    <button
+                      key={w}
+                      onClick={() => handleToggleBatchWeek(w)}
+                      className={`p-2 rounded-lg text-xs font-bold transition-all ${batchExportWeeks.includes(w)
+                        ? 'bg-amber-500 text-white shadow-lg'
+                        : 'bg-gray-800 text-slate-400 hover:bg-gray-700'
+                        }`}
+                    >
+                      {w.toString().padStart(2, '0')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Seleção de Servidores */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Servidores ({selectedServersForExport.length > 0 ? selectedServersForExport.length : servers.length} selecionado(s))
+                  </label>
+                  <button
+                    onClick={handleSelectAllServers}
+                    className="text-[9px] font-bold text-primary hover:underline"
+                  >
+                    {selectedServersForExport.length === servers.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </button>
+                </div>
+                <div className="max-h-48 overflow-y-auto p-2 bg-[#1c2127] rounded-xl border border-gray-700 space-y-1">
+                  {servers.map(server => (
+                    <button
+                      key={server.id}
+                      onClick={() => handleToggleServerForExport(server.id)}
+                      className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-all ${selectedServersForExport.includes(server.id) || selectedServersForExport.length === 0
+                          ? 'bg-emerald-500/20 border border-emerald-500/30'
+                          : 'bg-gray-800 border border-transparent'
+                        }`}
+                    >
+                      <div className={`size-4 rounded flex items-center justify-center border ${selectedServersForExport.includes(server.id) || selectedServersForExport.length === 0
+                          ? 'bg-emerald-500 border-emerald-500'
+                          : 'border-gray-600'
+                        }`}>
+                        {(selectedServersForExport.includes(server.id) || selectedServersForExport.length === 0) && (
+                          <span className="material-symbols-outlined text-white text-[10px]">check</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-white truncate">{server.name}</p>
+                        <p className="text-[9px] text-slate-500">Mat: {server.matricula}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9px] text-slate-500">
+                  {selectedServersForExport.length === 0
+                    ? 'Todos os servidores serão incluídos'
+                    : `${selectedServersForExport.length} servidor(es) selecionado(s)`}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-800 bg-[#1c2127] flex gap-3">
+              <button
+                onClick={() => setIsBatchExportModalOpen(false)}
+                disabled={isExporting}
+                className="flex-1 py-3 rounded-xl border border-gray-700 text-slate-300 font-medium hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleBatchExportPDF}
+                disabled={isExporting || batchExportWeeks.length === 0}
+                className="flex-1 py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 font-bold hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <><div className="size-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin"></div> Gerando...</>
+                ) : (
+                  <><span className="material-symbols-outlined text-sm">picture_as_pdf</span> PDF</>
+                )}
+              </button>
+              <button
+                onClick={handleBatchExportExcel}
+                disabled={isExporting || batchExportWeeks.length === 0}
+                className="flex-1 py-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold hover:bg-emerald-500/30 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <><div className="size-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div> Gerando...</>
+                ) : (
+                  <><span className="material-symbols-outlined text-sm">table_view</span> Excel</>
+                )}
+              </button>
             </div>
           </div>
         </div>
