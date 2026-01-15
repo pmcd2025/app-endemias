@@ -111,14 +111,15 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
                     {/* Avatar Upload */}
                     <div className="relative cursor-pointer group" onClick={handleImageClick}>
                         <div
-                            className="size-32 rounded-full bg-cover bg-center ring-4 ring-gray-700 group-hover:ring-primary transition-all shadow-xl"
+                            className="size-32 rounded-full bg-cover bg-center ring-4 ring-gray-700 group-hover:ring-primary active:ring-primary transition-all shadow-xl"
                             style={{ backgroundImage: `url('${getAvatarUrl()}')` }}
                         />
-                        <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all backdrop-blur-[2px]">
+                        {/* Ícone de câmera - sempre visível no mobile, hover no desktop */}
+                        <div className="absolute bottom-0 right-0 size-10 rounded-full bg-primary flex items-center justify-center shadow-lg border-2 border-[#1c2127] hover:bg-primary/80 active:scale-95 transition-all">
                             {uploadingImage ? (
-                                <div className="size-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <div className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                             ) : (
-                                <span className="material-symbols-outlined text-white text-3xl">photo_camera</span>
+                                <span className="material-symbols-outlined text-white text-xl">photo_camera</span>
                             )}
                         </div>
                     </div>
@@ -127,6 +128,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        capture="user"
                         onChange={handleImageChange}
                         className="hidden"
                     />
@@ -137,11 +139,19 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
                         <p className="text-xs text-gray-500">{userProfile?.email}</p>
                     </div>
 
-                    <div className="w-full pt-4 border-t border-gray-800/50">
-                        <p className="text-[10px] text-center text-gray-600">
-                            Clique na foto para alterar. Arquivos: .jpg, .png (Max 2MB)
-                        </p>
-                    </div>
+                    {/* Botão Alterar Foto - visível no mobile */}
+                    <button
+                        onClick={handleImageClick}
+                        disabled={uploadingImage}
+                        className="w-full py-3 px-4 bg-white/5 hover:bg-white/10 active:bg-white/15 border border-gray-700 rounded-xl text-sm font-medium text-gray-300 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        <span className="material-symbols-outlined text-lg">edit</span>
+                        {uploadingImage ? 'Enviando...' : 'Alterar Foto'}
+                    </button>
+
+                    <p className="text-[10px] text-center text-gray-600">
+                        Formatos: .jpg, .png (Máx 2MB)
+                    </p>
                 </div>
             </div>
         </div>

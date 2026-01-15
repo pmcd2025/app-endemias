@@ -2,146 +2,221 @@
 
 Sistema web para gerenciamento de ponto semanal dos servidores da Vigilância em Saúde, desenvolvido com React, TypeScript e Supabase.
 
+![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-4.1-06B6D4?logo=tailwindcss&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite&logoColor=white)
+
 ## ✨ Funcionalidades
 
 ### 📊 Dashboard
 - Visão geral dos servidores ativos
-- Monitoramento de faltas e atestados
-- Estatísticas por semana epidemiológica
-- Cards interativos com detalhamento
+- Monitoramento de faltas e atestados por semana epidemiológica
+- Cards interativos com detalhamento em modais
+- Indicadores de servidores em férias, afastados e inativos
 
 ### 👥 Gestão de Usuários
 - Cadastro de usuários com diferentes níveis de acesso
-- Upload de foto de perfil
-- Hierarquia: Administrador > Supervisor Geral > Supervisor de Área > Servidor
-- Edição e exclusão de usuários
+- Upload de foto de perfil com armazenamento no Supabase Storage
+- Hierarquia de roles:
+  - **Administrador** - Acesso total ao sistema
+  - **Supervisor Geral** - Gerencia todos os supervisores de área
+  - **Supervisor de Área** - Gerencia servidores da sua área
+  - **Servidor** - Visualização limitada
+- Edição e exclusão de usuários com validações
 
 ### 👷 Gestão de Servidores
 - Cadastro completo de servidores (Téc. Endemias, Supervisores)
-- Vínculo (Efetivo/Contrato) e status (Ativo, Férias, Afastado)
-- Vinculação hierárquica com supervisores
-- Filtros por supervisor e status
+- Tipos de vínculo: Efetivo ou Contrato
+- Status: Ativo, Férias, Afastado, Inativo
+- Vinculação hierárquica com supervisores de área
+- Filtros avançados por supervisor, status e tipo de servidor
 
 ### ⏰ Registro de Ponto
-- Registro por semana epidemiológica
-- Status diário: Normal, Falta, Férias, Folga, Atestado, etc.
-- Controle de dias trabalhados
-- Envio semanal de registros pelo Supervisor de Área
+- Registro organizado por semana epidemiológica
+- Status diário configuráveis:
+  - ✅ Normal
+  - ❌ Falta
+  - 🏖️ Férias
+  - 📅 Folga (Compensação)
+  - 🏥 Atestado
+  - 📚 Curso
+  - 🔧 Manutenção de Equipamento
+- Controle de dias trabalhados automático
+- Campo de produção semanal por servidor
+- **Envio semanal** pelo Supervisor de Área com validações
 
 ### 📈 Relatórios
-- Relatórios por período
-- Exportação de dados
-- Análises de produtividade
+- Relatórios por período e semana epidemiológica
+- Filtros por supervisor e status de submissão
+- Exportação individual e em lote:
+  - **PDF** - Relatório formatado para impressão
+  - **Excel** - Planilha detalhada com dados completos
+- Visualização de frequência e produção
+
+### 🔐 Autenticação
+- Login seguro com Supabase Auth
+- Controle de sessão persistente
+- Modal de perfil do usuário logado
 
 ## 🛠️ Tecnologias
 
-- **Frontend:** React 19, TypeScript, TailwindCSS 4
-- **Backend:** Supabase (PostgreSQL, Auth, Storage, Edge Functions)
-- **Build:** Vite
-- **Roteamento:** React Router DOM 7
+| Categoria | Tecnologia | Versão |
+|-----------|------------|--------|
+| **Frontend** | React | 19.2.3 |
+| **Linguagem** | TypeScript | 5.8.2 |
+| **Estilização** | Tailwind CSS | 4.1.18 |
+| **Build Tool** | Vite | 6.2.0 |
+| **Roteamento** | React Router DOM | 7.12.0 |
+| **Backend** | Supabase | 2.90.1 |
+| **PDF** | jsPDF + AutoTable | 4.0.0 / 5.0.7 |
+| **Excel** | SheetJS (xlsx) | 0.18.5 |
 
 ## 📁 Estrutura do Projeto
 
 ```
-src/
-├── components/           # Componentes reutilizáveis
-│   ├── AddUserModal.tsx     # Modal de adicionar usuário
-│   ├── EditUserModal.tsx    # Modal de editar usuário
-│   ├── EditServerModal.tsx  # Modal de editar servidor
-│   ├── Layout.tsx           # Layout principal
-│   └── SupervisorsModal.tsx # Modal de supervisores
-├── contexts/             # Contextos React
-│   └── AuthContext.tsx      # Gerenciamento de autenticação
-├── lib/                  # Utilitários e configurações
-│   ├── supabase.ts          # Cliente Supabase
-│   ├── database.types.ts    # Tipos TypeScript do banco
-│   └── constants.ts         # Constantes da aplicação
-├── pages/                # Páginas da aplicação
-│   ├── Dashboard.tsx        # Painel principal
-│   ├── Login.tsx            # Tela de login
-│   ├── Users.tsx            # Gestão de usuários
-│   ├── Servers.tsx          # Gestão de servidores
-│   ├── Ponto.tsx            # Registro de ponto
-│   └── Reports.tsx          # Relatórios
-├── App.tsx               # Componente principal e rotas
-├── index.tsx             # Entrada da aplicação
-└── index.css             # Estilos globais
+app_ponto/
+├── public/                  # Arquivos estáticos
+├── src/
+│   ├── components/          # Componentes reutilizáveis
+│   │   ├── AddUserModal.tsx    # Modal para adicionar usuário
+│   │   ├── EditUserModal.tsx   # Modal para editar usuário
+│   │   ├── EditServerModal.tsx # Modal para editar servidor
+│   │   ├── Layout.tsx          # Layout principal com sidebar
+│   │   ├── ProfileModal.tsx    # Modal de perfil do usuário
+│   │   └── SupervisorsModal.tsx # Modal de supervisores e técnicos
+│   ├── contexts/            # Contextos React
+│   │   └── AuthContext.tsx     # Gerenciamento de autenticação
+│   ├── lib/                 # Utilitários e configurações
+│   │   ├── supabase.ts         # Cliente Supabase configurado
+│   │   ├── database.types.ts   # Tipos TypeScript do banco
+│   │   └── constants.ts        # Constantes da aplicação
+│   ├── pages/               # Páginas da aplicação
+│   │   ├── Dashboard.tsx       # Painel principal com estatísticas
+│   │   ├── Login.tsx           # Tela de autenticação
+│   │   ├── Users.tsx           # Gestão de usuários
+│   │   ├── Servers.tsx         # Gestão de servidores
+│   │   ├── Ponto.tsx           # Registro de ponto semanal
+│   │   └── Reports.tsx         # Relatórios e exportações
+│   ├── App.tsx              # Componente principal e rotas
+│   ├── index.tsx            # Entrada da aplicação
+│   └── index.css            # Estilos globais Tailwind
+├── .env.example             # Exemplo de variáveis de ambiente
+├── index.html               # HTML principal
+├── package.json             # Dependências e scripts
+├── tsconfig.json            # Configuração TypeScript
+├── vite.config.ts           # Configuração Vite
+└── vercel.json              # Configuração de deploy Vercel
 ```
 
 ## 🚀 Como Executar
 
 ### Pré-requisitos
 - Node.js 18+
-- Conta no Supabase (para backend)
+- npm ou yarn
+- Conta no [Supabase](https://supabase.com) (para backend)
 
 ### Instalação
 
-1. Clone o repositório:
+1. **Clone o repositório:**
 ```bash
 git clone <url-do-repositorio>
 cd app_ponto
 ```
 
-2. Instale as dependências:
+2. **Instale as dependências:**
 ```bash
 npm install
 ```
 
-3. Configure as variáveis de ambiente em `.env.local`:
-```env
-VITE_SUPABASE_URL=sua_url_supabase
-VITE_SUPABASE_ANON_KEY=sua_chave_anon
+3. **Configure as variáveis de ambiente:**
+
+Copie o arquivo de exemplo e preencha com suas credenciais:
+```bash
+cp .env.example .env.local
 ```
 
-4. Execute em modo desenvolvimento:
+Edite `.env.local`:
+```env
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
+VITE_SUPABASE_ANON_KEY=sua_chave_anon_publica
+```
+
+4. **Execute em modo desenvolvimento:**
 ```bash
 npm run dev
 ```
 
-5. Acesse em `http://localhost:5173`
+5. **Acesse no navegador:**
+```
+http://localhost:5173
+```
 
 ### Build para Produção
 
 ```bash
+# Gerar build otimizado
 npm run build
+
+# Visualizar build localmente
 npm run preview
 ```
 
 ## 🔐 Configuração do Supabase
 
 ### Tabelas Necessárias
-- `users` - Usuários do sistema
-- `servers` - Servidores cadastrados
-- `time_entries` - Registros de ponto
-- `absences` - Faltas e atestados
+
+| Tabela | Descrição |
+|--------|-----------|
+| `users` | Usuários do sistema com roles e hierarquia |
+| `servers` | Servidores cadastrados (técnicos, supervisores) |
+| `time_entries` | Registros de ponto diário |
+| `absences` | Faltas e atestados |
+| `weekly_submissions` | Controle de envios semanais |
 
 ### Storage Buckets
-- `avatars` - Fotos de perfil (público)
-- `documents` - Documentos anexados (privado)
+
+| Bucket | Visibilidade | Uso |
+|--------|--------------|-----|
+| `avatars` | Público | Fotos de perfil dos usuários |
+| `documents` | Privado | Documentos anexados (atestados, etc.) |
 
 ### Edge Functions
-- `create-user` - Criação de usuários com autenticação
+
+| Função | Descrição |
+|--------|-----------|
+| `create-user` | Criação de usuários com autenticação automática |
 
 ## 📱 Responsividade
 
-O sistema foi desenvolvido com foco em dispositivos móveis (mobile-first), mas funciona perfeitamente em tablets e desktops.
+O sistema foi desenvolvido com abordagem **mobile-first**, garantindo excelente experiência em:
+- 📱 Smartphones
+- 📲 Tablets
+- 💻 Desktops
 
-## 👨‍💻 Desenvolvimento
-
-### Scripts Disponíveis
+## 👨‍💻 Scripts Disponíveis
 
 | Comando | Descrição |
 |---------|-----------|
-| `npm run dev` | Inicia servidor de desenvolvimento |
-| `npm run build` | Gera build de produção |
-| `npm run preview` | Visualiza build de produção |
+| `npm run dev` | Inicia servidor de desenvolvimento com hot reload |
+| `npm run build` | Gera build otimizado para produção |
+| `npm run preview` | Visualiza o build de produção localmente |
+
+## 🌐 Deploy
+
+O projeto está configurado para deploy na **Vercel**. O arquivo `vercel.json` contém as configurações necessárias para:
+- Rewrite de rotas SPA
+- Headers de cache otimizados
 
 ## 📄 Licença
 
-Projeto desenvolvido para a Prefeitura Municipal de Itabuna - Vigilância em Saúde.
+Projeto desenvolvido para a **Prefeitura Municipal de Itabuna** - Vigilância em Saúde.
 
 ---
 
 <div align="center">
   <strong>🏥 Vigilância em Saúde - PMCD Itabuna</strong>
+  <br>
+  <sub>Desenvolvido com ❤️ para a saúde pública</sub>
 </div>

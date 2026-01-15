@@ -101,6 +101,29 @@ const Layout: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Mobile Header with Profile */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#1c2127] border-b border-gray-800 sticky top-0 z-40">
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-lg bg-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-white text-lg">schedule</span>
+            </div>
+            <span className="font-semibold text-sm">Divisão de Endemias</span>
+          </div>
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="flex items-center gap-2 py-1.5 px-2 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 border border-gray-700/50 transition-all"
+          >
+            <div className="size-7 rounded-full overflow-hidden ring-2 ring-primary/30">
+              <img
+                src={userProfile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.name || 'User')}&background=3b82f6&color=fff`}
+                alt="Perfil"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <span className="material-symbols-outlined text-gray-400 text-lg">expand_more</span>
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 md:pb-0">
           <div className="w-full max-w-7xl mx-auto">
             <Outlet />
