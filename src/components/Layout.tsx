@@ -2,6 +2,7 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ProfileModal from './ProfileModal';
 
 const Layout: React.FC = () => {
   const navigate = useNavigate();
@@ -49,6 +50,9 @@ const Layout: React.FC = () => {
     </>
   );
 
+  // State for Profile Modal
+  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
+
   return (
     <div className="min-h-screen bg-background-dark text-white flex flex-col md:flex-row">
       {/* Desktop Sidebar */}
@@ -58,6 +62,26 @@ const Layout: React.FC = () => {
             <span className="material-symbols-outlined text-white">schedule</span>
           </div>
           <h1 className="font-bold text-lg tracking-tight">Divisão de Endemias</h1>
+        </div>
+
+        {/* User Profile Summary */}
+        <div
+          onClick={() => setIsProfileModalOpen(true)}
+          className="mx-2 mb-6 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-gray-700 transition-all cursor-pointer group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-full bg-gray-700 shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-primary/50 transition-all">
+              <img
+                src={userProfile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.name || 'User')}&background=3b82f6&color=fff`}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white truncate">{userProfile?.name || 'Usuário'}</p>
+              <p className="text-xs text-gray-400 truncate capitalize">{userProfile?.role?.replace('_', ' ') || 'Cargo'}</p>
+            </div>
+          </div>
         </div>
 
         <nav className="flex flex-col gap-2">
@@ -90,6 +114,12 @@ const Layout: React.FC = () => {
           <NavContent />
         </div>
       </nav>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </div>
   );
 };
