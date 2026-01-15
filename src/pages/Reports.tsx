@@ -73,7 +73,13 @@ const Reports: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<WeeklyRecordWithDetails | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editWeekData, setEditWeekData] = useState<Record<number, DailyEntry>>({});
+  const [editWeekDetails, setEditWeekDetails] = useState<{ week: number; year: number }>({ week: 0, year: 0 }); // [NEW] State for week details
   const [isSaving, setIsSaving] = useState(false);
+
+  // Modal de exclusão
+  const [recordToDelete, setRecordToDelete] = useState<WeeklyRecordWithDetails | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Estado para visualização detalhada (expandir/colapsar semanas)
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
@@ -304,6 +310,7 @@ const Reports: React.FC = () => {
 
   const handleEditRecord = (record: WeeklyRecordWithDetails) => {
     setEditingRecord(record);
+    setEditWeekDetails({ week: record.week_number, year: record.year }); // [NEW] Initialize week details
     const data: Record<number, DailyEntry> = {};
     for (let day = 1; day <= 6; day++) {
       const entry = record.daily_entries.find(e => e.day_of_week === day);
@@ -318,6 +325,20 @@ const Reports: React.FC = () => {
 
     setIsSaving(true);
     try {
+      // 1. Atualizar detalhes da semana (se mudou)
+      if (editWeekDetails.week !== editingRecord.week_number || editWeekDetails.year !== editingRecord.year) {
+        const { error: weekUpdateError } = await (supabase.from('weekly_records') as any)
+          .update({
+            week_number: editWeekDetails.week,
+            year: editWeekDetails.year,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingRecord.id);
+
+        if (weekUpdateError) throw weekUpdateError;
+      }
+
+      // 2. Atualizar entradas diárias
       const daysToSave = [1, 2, 3, 4, 5];
       if (editingRecord.saturday_active) daysToSave.push(6);
 
@@ -326,7 +347,7 @@ const Reports: React.FC = () => {
         const existingEntry = editingRecord.daily_entries.find(e => e.day_of_week === day);
 
         const payload = {
-          weekly_record_id: editingRecord.id,
+          weekly_record_id: editingRecord.id, // ID remains the same
           day_of_week: day,
           worked_days: Number(dayData.worked_days),
           production: Number(dayData.production) || 0,
@@ -356,24 +377,31 @@ const Reports: React.FC = () => {
     }
   };
 
-  const handleDeleteRecord = async (record: WeeklyRecordWithDetails) => {
-    if (!window.confirm(`Excluir registro da Semana ${record.week_number}/${record.year}?\n\nEsta ação não pode ser desfeita.`)) {
-      return;
-    }
+  const handleDeleteRecord = (record: WeeklyRecordWithDetails) => {
+    setRecordToDelete(record);
+    setIsDeleteModalOpen(true);
+  };
 
+  const executeDelete = async () => {
+    if (!recordToDelete) return;
+
+    setIsDeleting(true);
     try {
       // Excluir entradas diárias primeiro
-      await supabase.from('daily_entries').delete().eq('weekly_record_id', record.id);
+      await supabase.from('daily_entries').delete().eq('weekly_record_id', recordToDelete.id);
 
       // Excluir registro semanal
-      const { error } = await supabase.from('weekly_records').delete().eq('id', record.id);
+      const { error } = await supabase.from('weekly_records').delete().eq('id', recordToDelete.id);
       if (error) throw error;
 
-      alert('Registro excluído com sucesso!');
+      setIsDeleteModalOpen(false);
       fetchServerRecords();
     } catch (err) {
       console.error('Erro ao excluir:', err);
       alert('Erro ao excluir registro.');
+    } finally {
+      setIsDeleting(false);
+      setRecordToDelete(null);
     }
   };
 
@@ -840,6 +868,30 @@ const Reports: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {/* Edição da Semana e Ano */}
+              <div className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-primary mb-1 block">Semana Nº</label>
+                  <input
+                    type="number"
+                    min="1" max="53"
+                    value={editWeekDetails.week}
+                    onChange={(e) => setEditWeekDetails(prev => ({ ...prev, week: parseInt(e.target.value) }))}
+                    className="w-full bg-[#1c2127] border border-gray-700 rounded-lg p-2 text-white font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-primary mb-1 block">Ano</label>
+                  <input
+                    type="number"
+                    min="2024" max="2030"
+                    value={editWeekDetails.year}
+                    onChange={(e) => setEditWeekDetails(prev => ({ ...prev, year: parseInt(e.target.value) }))}
+                    className="w-full bg-[#1c2127] border border-gray-700 rounded-lg p-2 text-white font-bold"
+                  />
+                </div>
+              </div>
+
               {[1, 2, 3, 4, 5, 6].map(day => {
                 if (day === 6 && !editingRecord.saturday_active) return null;
                 const data = editWeekData[day] || { worked_days: 0, production: 0, status: 'Normal' };
@@ -911,6 +963,38 @@ const Reports: React.FC = () => {
                   'Salvar'
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Exclusão */}
+      {isDeleteModalOpen && recordToDelete && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-[#1c2127] rounded-2xl border border-gray-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 text-center">
+              <div className="size-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                <span className="material-symbols-outlined text-red-500 text-3xl">delete_forever</span>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Excluir Semana {recordToDelete.week_number}?</h3>
+              <p className="text-sm text-slate-400 mb-6">
+                Todos os registros diários desta semana serão removidos permanentemente. Esta ação não pode ser desfeita.
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-700 text-slate-300 font-medium hover:bg-white/5 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={executeDelete}
+                  disabled={isDeleting}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold shadow-lg shadow-red-500/20 hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

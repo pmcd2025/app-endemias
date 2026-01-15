@@ -45,17 +45,19 @@ interface DayRowProps {
   isActive?: boolean;
   data: DiaRegistro;
   onDayChange: (day: number, field: keyof DiaRegistro, value: any) => void;
+  disabled?: boolean;
 }
 
-const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, onDayChange }) => {
+const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, onDayChange, disabled = false }) => {
   const handleProductionStep = (step: number) => {
+    if (disabled) return;
     const current = parseFloat(data.producao) || 0;
     const next = Math.max(0, current + step);
     onDayChange(dayNum, 'producao', next.toString());
   };
 
   return (
-    <div className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-800 bg-background-dark/50 ${!isActive ? 'opacity-40 pointer-events-none' : ''}`}>
+    <div className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-800 bg-background-dark/50 ${(!isActive || disabled) ? 'opacity-60' : ''} ${!isActive ? 'pointer-events-none' : ''}`}>
       <div className="flex justify-between items-center">
         <span className="text-xs font-bold text-primary uppercase">{label}</span>
       </div>
@@ -64,10 +66,10 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
           <label className="text-[10px] text-slate-500 font-bold uppercase">Trabalhou?</label>
           <input
             type="checkbox"
-            disabled={data.status !== 'Normal'}
+            disabled={disabled || data.status !== 'Normal'}
             checked={Number(data.worked_days) > 0}
             onChange={(e) => onDayChange(dayNum, 'worked_days', e.target.checked ? 1 : 0)}
-            className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary focus:ring-primary transition-all ${data.status !== 'Normal' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary focus:ring-primary transition-all ${(disabled || data.status !== 'Normal') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
               }`}
           />
         </div>
@@ -77,22 +79,25 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
           <div className="flex items-center gap-1">
             <button
               type="button"
+              disabled={disabled}
               onClick={() => handleProductionStep(-1)}
-              className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
+              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
             >
               <span className="material-symbols-outlined text-sm">remove</span>
             </button>
             <input
               type="number"
+              disabled={disabled}
               placeholder="0"
               value={data.producao}
               onChange={(e) => onDayChange(dayNum, 'producao', e.target.value)}
-              className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none"
+              className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none disabled:opacity-50"
             />
             <button
               type="button"
+              disabled={disabled}
               onClick={() => handleProductionStep(1)}
-              className="size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white hover:bg-gray-600 active:scale-95 transition-all"
+              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
             >
               <span className="material-symbols-outlined text-sm">add</span>
             </button>
@@ -103,8 +108,9 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
           <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
           <select
             value={data.status}
+            disabled={disabled}
             onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
-            className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none"
+            className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none disabled:opacity-50"
           >
             {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
           </select>
@@ -148,9 +154,10 @@ const Ponto: React.FC = () => {
   });
   const [weeklyRecordId, setWeeklyRecordId] = useState<string | null>(null);
   const [observacao, setObservacao] = useState('');
+  const [isRecordLocked, setIsRecordLocked] = useState(false); // New state to lock the modal inputs
 
-  const years = Array.from({ length: 6 }, (_, i) => (2025 + i).toString());
-  const weeks = Array.from({ length: 52 }, (_, i) => (i + 1).toString().padStart(2, '0'));
+  const years = Array.from({ length: 6 }, (_, i) => (2025 + i));
+  const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
 
   function getCurrentWeekNumber() {
     const d = new Date();
@@ -409,6 +416,9 @@ const Ponto: React.FC = () => {
           });
         }
         setWeekData(newWeekData);
+        setIsRecordLocked((record as any).status === 'submitted');
+      } else {
+        setIsRecordLocked(isWeekSubmitted && selectedYear === globalSelectedYear && selectedWeek === globalSelectedWeek);
       }
     } catch (err) {
       console.error(err);
@@ -419,8 +429,8 @@ const Ponto: React.FC = () => {
 
   const handleOpenModal = (server: Server) => {
     setSelectedServer(server);
-    setSelectedYear(new Date().getFullYear());
-    setSelectedWeek(getCurrentWeekNumber());
+    setSelectedYear(globalSelectedYear);
+    setSelectedWeek(globalSelectedWeek);
     setIsModalOpen(true);
   };
 
@@ -569,15 +579,14 @@ const Ponto: React.FC = () => {
       </div>
       <button
         onClick={() => handleOpenModal(server)}
-        disabled={isWeekSubmitted}
         className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${isWeekSubmitted
-          ? 'bg-gray-600 text-slate-400 cursor-not-allowed'
+          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20'
           : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
           }`}
-        title={isWeekSubmitted ? 'Semana já enviada - não é possível editar' : 'Registrar ponto'}
+        title={isWeekSubmitted ? 'Visualizar registro (Enviado)' : 'Registrar ponto'}
       >
-        <span className="material-symbols-outlined text-sm">{isWeekSubmitted ? 'lock' : 'edit_calendar'}</span>
-        {isWeekSubmitted ? 'Bloqueado' : 'Registrar'}
+        <span className="material-symbols-outlined text-sm">{isWeekSubmitted ? 'visibility' : 'edit_calendar'}</span>
+        {isWeekSubmitted ? 'Ver' : 'Registrar'}
       </button>
     </div>
   );
@@ -623,7 +632,7 @@ const Ponto: React.FC = () => {
                 onChange={(e) => setGlobalSelectedWeek(parseInt(e.target.value))}
                 className="bg-[#101922] border border-gray-700 rounded-lg text-sm px-3 py-2 text-white focus:ring-primary"
               >
-                {weeks.map(w => <option key={w} value={w}>Semana {w}</option>)}
+                {weeks.map(w => <option key={w} value={w}>Semana {w.toString().padStart(2, '0')}</option>)}
               </select>
             </div>
 
@@ -859,7 +868,7 @@ const Ponto: React.FC = () => {
                       onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
                       className="bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-2.5 text-white focus:ring-primary"
                     >
-                      {weeks.map(w => <option key={w} value={w}>Semana {w}</option>)}
+                      {weeks.map(w => <option key={w} value={w}>Semana {w.toString().padStart(2, '0')}</option>)}
                     </select>
                   </div>
                 </div>
@@ -867,11 +876,11 @@ const Ponto: React.FC = () => {
 
               {/* Dias da Semana */}
               <div className="space-y-3">
-                <DayRow dayNum={1} label="Segunda-feira" data={weekData[1]} onDayChange={handleDayChange} />
-                <DayRow dayNum={2} label="Terça-feira" data={weekData[2]} onDayChange={handleDayChange} />
-                <DayRow dayNum={3} label="Quarta-feira" data={weekData[3]} onDayChange={handleDayChange} />
-                <DayRow dayNum={4} label="Quinta-feira" data={weekData[4]} onDayChange={handleDayChange} />
-                <DayRow dayNum={5} label="Sexta-feira" data={weekData[5]} onDayChange={handleDayChange} />
+                <DayRow dayNum={1} label="Segunda-feira" data={weekData[1]} onDayChange={handleDayChange} disabled={isRecordLocked} />
+                <DayRow dayNum={2} label="Terça-feira" data={weekData[2]} onDayChange={handleDayChange} disabled={isRecordLocked} />
+                <DayRow dayNum={3} label="Quarta-feira" data={weekData[3]} onDayChange={handleDayChange} disabled={isRecordLocked} />
+                <DayRow dayNum={4} label="Quinta-feira" data={weekData[4]} onDayChange={handleDayChange} disabled={isRecordLocked} />
+                <DayRow dayNum={5} label="Sexta-feira" data={weekData[5]} onDayChange={handleDayChange} disabled={isRecordLocked} />
 
                 {/* Sábado Opcional */}
                 <div className="pt-3 border-t border-gray-800">
@@ -881,13 +890,14 @@ const Ponto: React.FC = () => {
                       <span className="text-sm font-bold text-white">Sábado (Opcional)</span>
                     </div>
                     <button
+                      disabled={isRecordLocked}
                       onClick={() => setIsSaturdayActive(!isSaturdayActive)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isSaturdayActive ? 'bg-primary' : 'bg-gray-700'}`}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isSaturdayActive ? 'bg-primary' : 'bg-gray-700'} ${isRecordLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSaturdayActive ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                   </div>
-                  <DayRow dayNum={6} label="Sábado" isActive={isSaturdayActive} data={weekData[6]} onDayChange={handleDayChange} />
+                  <DayRow dayNum={6} label="Sábado" isActive={isSaturdayActive} data={weekData[6]} onDayChange={handleDayChange} disabled={isRecordLocked} />
                 </div>
               </div>
 
@@ -903,12 +913,13 @@ const Ponto: React.FC = () => {
                   </span>
                 </div>
                 <textarea
+                  disabled={isRecordLocked}
                   value={observacao}
                   onChange={(e) => setObservacao(e.target.value.slice(0, 800))}
-                  placeholder="Digite observações sobre o registro desta semana (opcional)..."
+                  placeholder={isRecordLocked ? "Sem observações." : "Digite observações sobre o registro desta semana (opcional)..."}
                   maxLength={800}
                   rows={3}
-                  className="w-full bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-3 text-white placeholder:text-slate-500 focus:ring-primary focus:border-primary resize-none"
+                  className="w-full bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-3 text-white placeholder:text-slate-500 focus:ring-primary focus:border-primary resize-none disabled:opacity-50"
                 />
               </div>
             </div>
@@ -920,15 +931,17 @@ const Ponto: React.FC = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="flex-1 py-3 rounded-xl border border-gray-700 text-white font-bold text-sm hover:bg-white/5 transition-all"
                 >
-                  Cancelar
+                  {isRecordLocked ? 'Fechar' : 'Cancelar'}
                 </button>
-                <button
-                  onClick={handleSave}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary to-blue-600 text-white font-bold text-sm shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-lg">save</span>
-                  Salvar
-                </button>
+                {!isRecordLocked && (
+                  <button
+                    onClick={handleSave}
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-primary to-blue-600 text-white font-bold text-sm shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-lg">save</span>
+                    Salvar
+                  </button>
+                )}
               </div>
             </div>
           </div>
