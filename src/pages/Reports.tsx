@@ -24,6 +24,7 @@ interface WeeklyRecordWithDetails {
   saturday_active: boolean | null;
   status: string | null;
   server_id: string;
+  notes: string | null; // Campo de observações
   daily_entries: DailyEntry[];
 }
 
@@ -233,6 +234,7 @@ const Reports: React.FC = () => {
           saturday_active,
           status,
           server_id,
+          notes,
           daily_entries (
             id,
             day_of_week,
@@ -255,6 +257,7 @@ const Reports: React.FC = () => {
         saturday_active: r.saturday_active,
         status: r.status,
         server_id: r.server_id,
+        notes: r.notes || null,
         daily_entries: r.daily_entries || []
       }));
 
@@ -1244,6 +1247,17 @@ const Reports: React.FC = () => {
                                 );
                               })}
                             </div>
+
+                            {/* Observações */}
+                            {record.notes && (
+                              <div className="mt-3 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                <p className="text-[9px] text-blue-400 uppercase font-bold mb-1 flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[12px]">notes</span>
+                                  Observações
+                                </p>
+                                <p className="text-xs text-slate-300">{record.notes}</p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

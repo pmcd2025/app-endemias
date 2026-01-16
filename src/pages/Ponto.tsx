@@ -144,6 +144,7 @@ const Ponto: React.FC = () => {
   const [globalSelectedYear, setGlobalSelectedYear] = useState(new Date().getFullYear());
   const [globalSelectedWeek, setGlobalSelectedWeek] = useState(0); // 0 = não selecionado
   const [submittedServerIds, setSubmittedServerIds] = useState<Set<string>>(new Set());
+  const [registeredServerIds, setRegisteredServerIds] = useState<Set<string>>(new Set()); // Servidores com registro (draft ou submitted)
 
   // States for Modal
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -302,6 +303,10 @@ const Ponto: React.FC = () => {
       }
 
       setWeeklyRecordsCount(records?.length || 0);
+
+      // Servidores com qualquer registro (draft ou submitted)
+      const registeredIds = new Set(records?.map((r: any) => r.server_id) || []);
+      setRegisteredServerIds(registeredIds);
 
       // Verificar se algum registro já foi enviado (status = 'submitted')
       const submittedIds = new Set(records?.filter((r: any) => r.status === 'submitted').map((r: any) => r.server_id));
@@ -525,6 +530,12 @@ const Ponto: React.FC = () => {
   const handleSave = async () => {
     if (!selectedServer) return;
 
+    // Validar se a semana foi selecionada
+    if (selectedWeek === 0 || selectedWeek < 1 || selectedWeek > 53) {
+      alert('Por favor, selecione uma semana válida (1-53) antes de salvar.');
+      return;
+    }
+
     try {
       const weeklyPayload: InsertTables<'weekly_records'> = {
         server_id: selectedServer.id,
@@ -591,6 +602,13 @@ const Ponto: React.FC = () => {
       });
 
       await Promise.all(entriesPromises);
+
+      // Atualizar estado para refletir que este servidor foi registrado
+      if (selectedServer && !registeredServerIds.has(selectedServer.id)) {
+        setRegisteredServerIds(prev => new Set([...prev, selectedServer.id]));
+        setWeeklyRecordsCount(prev => prev + 1);
+      }
+
       setIsModalOpen(false);
 
     } catch (err) {
@@ -645,10 +663,24 @@ const Ponto: React.FC = () => {
 
   // Componente do card de servidor para registro
   const ServerCard = ({ server }: { server: Server }) => {
-    // Verificar se ESTE servidor específico já foi enviado
-    const isThisServerSubmitted = submittedServerIds.has(server.id);
+    // Verificar status do registro DESTE servidor
+    const isRegistered = registeredServerIds.has(server.id);
+    const isSubmitted = submittedServerIds.has(server.id);
     // Admin pode editar mesmo se enviado
-    const showAsSubmitted = isThisServerSubmitted && userProfile?.role !== 'admin';
+    const showAsSubmitted = isSubmitted && userProfile?.role !== 'admin';
+
+    // Determinar texto e estilo do botão
+    const getButtonConfig = () => {
+      if (showAsSubmitted) {
+        return { icon: 'visibility', text: 'Ver', style: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20' };
+      }
+      if (isRegistered) {
+        return { icon: 'edit', text: 'Editar', style: 'bg-amber-500/10 text-amber-500 border border-amber-500/30 hover:bg-amber-500/20' };
+      }
+      return { icon: 'edit_calendar', text: 'Registrar', style: 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105' };
+    };
+
+    const btnConfig = getButtonConfig();
 
     return (
       <div className="flex items-center gap-3 p-3 rounded-xl bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all group">
@@ -671,24 +703,26 @@ const Ponto: React.FC = () => {
                 {server.vinculo}
               </span>
             )}
-            {/* Indicador de status do envio DESTE servidor */}
-            {isThisServerSubmitted && (
+            {/* Badge de status do registro */}
+            {isSubmitted && (
               <span className="px-1 py-0.5 rounded text-[7px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Enviado
+                ✓ Enviado
+              </span>
+            )}
+            {isRegistered && !isSubmitted && (
+              <span className="px-1 py-0.5 rounded text-[7px] font-bold uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                ✓ Registrado
               </span>
             )}
           </div>
         </div>
         <button
           onClick={() => handleOpenModal(server)}
-          className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${showAsSubmitted
-            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20'
-            : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
-            }`}
-          title={showAsSubmitted ? 'Visualizar registro (Enviado)' : 'Registrar ponto'}
+          className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${btnConfig.style}`}
+          title={showAsSubmitted ? 'Visualizar registro (Enviado)' : isRegistered ? 'Editar registro' : 'Registrar ponto'}
         >
-          <span className="material-symbols-outlined text-sm">{showAsSubmitted ? 'visibility' : 'edit_calendar'}</span>
-          {showAsSubmitted ? 'Ver' : 'Registrar'}
+          <span className="material-symbols-outlined text-sm">{btnConfig.icon}</span>
+          {btnConfig.text}
         </button>
       </div>
     );
