@@ -142,11 +142,12 @@ const Ponto: React.FC = () => {
   const [isWeekSubmitted, setIsWeekSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalSelectedYear, setGlobalSelectedYear] = useState(new Date().getFullYear());
-  const [globalSelectedWeek, setGlobalSelectedWeek] = useState(getCurrentWeekNumber());
+  const [globalSelectedWeek, setGlobalSelectedWeek] = useState(0); // 0 = não selecionado
+  const [submittedServerIds, setSubmittedServerIds] = useState<Set<string>>(new Set());
 
   // States for Modal
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekNumber());
+  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = não selecionado
   const [isLoadingRecord, setIsLoadingRecord] = useState(false);
   const [weekData, setWeekData] = useState<RegistroSemanalMap>({
     1: { ...initialDayState },
@@ -303,10 +304,67 @@ const Ponto: React.FC = () => {
       setWeeklyRecordsCount(records?.length || 0);
 
       // Verificar se algum registro já foi enviado (status = 'submitted')
+      const submittedIds = new Set(records?.filter((r: any) => r.status === 'submitted').map((r: any) => r.server_id));
+      setSubmittedServerIds(submittedIds);
+
       const anySubmitted = records?.some((r: any) => r.status === 'submitted');
       setIsWeekSubmitted(anySubmitted || false);
     } catch (err) {
       console.error('Erro:', err);
+    }
+  };
+
+  // Função para limpar dados de uma semana específica (reset)
+  const handleResetWeek = async () => {
+    if (globalSelectedWeek === 0 || !userProfile) return;
+
+    const isAdmin = userProfile.role === 'admin';
+    const message = isAdmin
+      ? `SUPER ADMIN - PERIGO:\n\nDeseja APAGAR TODOS os dados vindo de TODOS os usuários da Semana ${globalSelectedWeek}/${globalSelectedYear}?\n\nIsso limpará completamente a semana para TODO O SISTEMA.\n\nDeseja continuar?`
+      : `ATENÇÃO: Deseja APAGAR os dados da sua equipe na Semana ${globalSelectedWeek}/${globalSelectedYear}?\n\nIsso removerá os registros dos seus servidores desta semana.\n\nEsta ação NÃO pode ser desfeita.`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      let query = supabase
+        .from('weekly_records')
+        .delete()
+        .eq('week_number', globalSelectedWeek)
+        .eq('year', globalSelectedYear);
+
+      // Se NÃO for admin, restringir aos servidores visíveis
+      if (!isAdmin) {
+        const visibleServerIds = servers.map(s => s.id);
+        if (visibleServerIds.length === 0) {
+          alert('Nenhum servidor encontrado para limpar.');
+          return;
+        }
+        query = query.in('server_id', visibleServerIds);
+      }
+
+      const { error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      alert(isAdmin
+        ? `Limpeza Geral Concluída: Todos os dados da Semana ${globalSelectedWeek} foram removidos do sistema.`
+        : `Dados da sua equipe na Semana ${globalSelectedWeek} foram removidos com sucesso.`);
+
+      // Atualizar contadores
+      checkWeeklyCompleteness();
+
+    } catch (err) {
+      console.error('Erro ao resetar semana:', err);
+      // @ts-ignore
+      alert(`Erro ao tentar resetar a semana: ${err.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -349,6 +407,9 @@ const Ponto: React.FC = () => {
 
   // Verificar se a semana atual está bloqueada para edição
   const isCurrentWeekLocked = () => {
+    // Admin nunca está bloqueado
+    if (userProfile?.role === 'admin') return false;
+
     return isWeekSubmitted &&
       selectedYear === globalSelectedYear &&
       selectedWeek === globalSelectedWeek;
@@ -420,9 +481,12 @@ const Ponto: React.FC = () => {
           });
         }
         setWeekData(newWeekData);
-        setIsRecordLocked((record as any).status === 'submitted');
+        // Bloquear apenas se ESTE registro foi enviado E usuário não é admin
+        const thisRecordSubmitted = (record as any).status === 'submitted';
+        setIsRecordLocked(thisRecordSubmitted && userProfile?.role !== 'admin');
       } else {
-        setIsRecordLocked(isWeekSubmitted && selectedYear === globalSelectedYear && selectedWeek === globalSelectedWeek);
+        // Sem registro existente = sempre pode editar (não está bloqueado)
+        setIsRecordLocked(false);
       }
     } catch (err) {
       console.error(err);
@@ -580,42 +644,55 @@ const Ponto: React.FC = () => {
   const shouldAutoExpand = searchTerm.length > 0;
 
   // Componente do card de servidor para registro
-  const ServerCard = ({ server }: { server: Server }) => (
-    <div className="flex items-center gap-3 p-3 rounded-xl bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all group">
-      <div className="relative">
-        <div
-          className={`h-11 w-11 rounded-full bg-cover bg-center ${server.status === 'inactive' ? 'grayscale' : ''}`}
-          style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
-        />
-        <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1c2127] ${getStatusColor(server.status)}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-white truncate">{server.name}</p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
-          {server.vinculo && (
-            <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase border ${server.vinculo === 'Efetivo'
-              ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20'
-              : 'bg-blue-400/10 text-blue-400 border-blue-400/20'
-              }`}>
-              {server.vinculo}
-            </span>
-          )}
+  const ServerCard = ({ server }: { server: Server }) => {
+    // Verificar se ESTE servidor específico já foi enviado
+    const isThisServerSubmitted = submittedServerIds.has(server.id);
+    // Admin pode editar mesmo se enviado
+    const showAsSubmitted = isThisServerSubmitted && userProfile?.role !== 'admin';
+
+    return (
+      <div className="flex items-center gap-3 p-3 rounded-xl bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all group">
+        <div className="relative">
+          <div
+            className={`h-11 w-11 rounded-full bg-cover bg-center ${server.status === 'inactive' ? 'grayscale' : ''}`}
+            style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
+          />
+          <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1c2127] ${getStatusColor(server.status)}`} />
         </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white truncate">{server.name}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
+            {server.vinculo && (
+              <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase border ${server.vinculo === 'Efetivo'
+                ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20'
+                : 'bg-blue-400/10 text-blue-400 border-blue-400/20'
+                }`}>
+                {server.vinculo}
+              </span>
+            )}
+            {/* Indicador de status do envio DESTE servidor */}
+            {isThisServerSubmitted && (
+              <span className="px-1 py-0.5 rounded text-[7px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Enviado
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => handleOpenModal(server)}
+          className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${showAsSubmitted
+            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20'
+            : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
+            }`}
+          title={showAsSubmitted ? 'Visualizar registro (Enviado)' : 'Registrar ponto'}
+        >
+          <span className="material-symbols-outlined text-sm">{showAsSubmitted ? 'visibility' : 'edit_calendar'}</span>
+          {showAsSubmitted ? 'Ver' : 'Registrar'}
+        </button>
       </div>
-      <button
-        onClick={() => handleOpenModal(server)}
-        className={`px-3 py-2 rounded-lg text-xs font-bold shadow-lg transition-all flex items-center gap-1.5 ${isWeekSubmitted
-          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20'
-          : 'bg-gradient-to-r from-primary to-blue-600 text-white shadow-primary/20 hover:shadow-primary/40 hover:scale-105'
-          }`}
-        title={isWeekSubmitted ? 'Visualizar registro (Enviado)' : 'Registrar ponto'}
-      >
-        <span className="material-symbols-outlined text-sm">{isWeekSubmitted ? 'visibility' : 'edit_calendar'}</span>
-        {isWeekSubmitted ? 'Ver' : 'Registrar'}
-      </button>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex flex-col min-h-full pb-6 bg-background-dark">
@@ -639,6 +716,51 @@ const Ponto: React.FC = () => {
         </div>
       </header>
 
+      {/* Alerta de Pendências (Visível para Admin e Supervisor Geral) */}
+      {(userProfile?.role === 'admin' || userProfile?.role === 'supervisor_geral') && globalSelectedWeek > 0 && (
+        <div className="px-4 pt-4">
+          {hierarchyData.map(supGeral => {
+            // Se for supervisor geral, só mostra a própria hierarquia
+            if (userProfile.role === 'supervisor_geral' && userProfile.id !== supGeral.id && supGeral.id !== 'sem-geral') return null;
+
+            const totalServidores = supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0);
+            const pendentes = supGeral.supervisoresArea.reduce((acc, area) =>
+              acc + area.servidores.filter(s => !submittedServerIds.has(s.id)).length
+              , 0);
+
+            if (pendentes === 0) return null;
+
+            return (
+              <div key={supGeral.id} className="mb-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/20 text-amber-500">
+                    <span className="material-symbols-outlined">pending_actions</span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Envio Pendente: {supGeral.name}</h3>
+                    <p className="text-xs text-slate-400">
+                      {pendentes} de {totalServidores} servidores ainda não foram enviados nesta semana.
+                    </p>
+                  </div>
+                </div>
+                {/* Detalhes por Área */}
+                <div className="hidden sm:flex flex-wrap gap-2 justify-end max-w-[50%]">
+                  {supGeral.supervisoresArea.map(area => {
+                    const areaPendentes = area.servidores.filter(s => !submittedServerIds.has(s.id)).length;
+                    if (areaPendentes === 0) return null;
+                    return (
+                      <span key={area.id} className="px-2 py-1 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold border border-amber-500/30" title={`${area.name}: ${areaPendentes} pendentes`}>
+                        {area.name.split(' ')[0]}: {areaPendentes}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <main className="flex-1 p-4 space-y-4">
         {/* Painel de Controle da Semana */}
         <div className="p-4 rounded-2xl bg-gradient-to-r from-[#1c2127] to-[#252b33] border border-gray-800 space-y-4">
@@ -658,6 +780,7 @@ const Ponto: React.FC = () => {
                 onChange={(e) => setGlobalSelectedWeek(parseInt(e.target.value))}
                 className="bg-[#101922] border border-gray-700 rounded-lg text-sm px-3 py-2 text-white focus:ring-primary"
               >
+                <option value={0}>Selecione a Semana</option>
                 {weeks.map(w => <option key={w} value={w}>Semana {w.toString().padStart(2, '0')}</option>)}
               </select>
             </div>
@@ -674,33 +797,50 @@ const Ponto: React.FC = () => {
             </div>
 
             {/* Botão Enviar Semana */}
-            <button
-              onClick={handleSubmitWeek}
-              disabled={isSubmitting || weeklyRecordsCount < servers.length || isWeekSubmitted}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg ${isWeekSubmitted
-                ? 'bg-emerald-500 text-white cursor-not-allowed shadow-emerald-500/30'
-                : weeklyRecordsCount >= servers.length
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-amber-500/40 active:scale-[0.98]'
-                  : 'bg-gray-700 text-slate-400 cursor-not-allowed'
-                }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="size-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Enviando...</span>
-                </>
-              ) : isWeekSubmitted ? (
-                <>
-                  <span className="material-symbols-outlined text-lg">check_circle</span>
-                  <span>Semana Enviada</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-lg">send</span>
-                  <span>Enviar Semana</span>
-                </>
+            <div className="flex gap-2">
+              {/* Botão de Emergência - Limpar Semana 
+                  Admin vê sempre (se não enviado ou se enviado mas precisa corrigir), 
+                  Supervisores vêem apenas se tiverem registros e não enviado */}
+              {((userProfile?.role === 'admin') || (weeklyRecordsCount > 0 && !isWeekSubmitted)) && (
+                <button
+                  onClick={handleResetWeek}
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 font-bold text-sm hover:bg-red-500/20 active:bg-red-500/30 transition-all flex items-center gap-2"
+                  title={userProfile?.role === 'admin' ? "Limpeza Geral: Apagar todos os dados desta semana" : "Apagar dados da sua equipe nesta semana"}
+                >
+                  <span className="material-symbols-outlined text-lg">delete_sweep</span>
+                  <span className="hidden sm:inline">Limpar Semana</span>
+                </button>
               )}
-            </button>
+
+              <button
+                onClick={handleSubmitWeek}
+                disabled={isSubmitting || weeklyRecordsCount < servers.length || submittedServerIds.size === servers.length}
+                className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold shadow-lg transition-all ${submittedServerIds.size === servers.length
+                  ? 'bg-emerald-500 text-white shadow-emerald-500/20 cursor-default'
+                  : weeklyRecordsCount >= servers.length
+                    ? 'bg-amber-500 text-white shadow-amber-500/20 hover:bg-amber-600 active:bg-amber-700'
+                    : 'bg-[#1c2127] border border-gray-700 text-slate-500 cursor-not-allowed'
+                  }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Processando...</span>
+                  </>
+                ) : submittedServerIds.size === servers.length ? (
+                  <>
+                    <span className="material-symbols-outlined">check_circle</span>
+                    <span>Semana Enviada</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined">send</span>
+                    <span>Enviar Semana</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Barra de Progresso Visual */}

@@ -68,7 +68,7 @@ const Reports: React.FC = () => {
   const [selectedServer, setSelectedServer] = useState<Server | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedWeeks, setSelectedWeeks] = useState<number[]>([getCurrentWeekNumber()]);
+  const [selectedWeeks, setSelectedWeeks] = useState<number[]>([]); // Iniciar sem seleção
   const [serverRecords, setServerRecords] = useState<WeeklyRecordWithDetails[]>([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
 
@@ -101,7 +101,7 @@ const Reports: React.FC = () => {
   // Estados para exportação em lote
   const [isBatchExportModalOpen, setIsBatchExportModalOpen] = useState(false);
   const [batchExportYear, setBatchExportYear] = useState(new Date().getFullYear());
-  const [batchExportWeeks, setBatchExportWeeks] = useState<number[]>([getCurrentWeekNumber()]);
+  const [batchExportWeeks, setBatchExportWeeks] = useState<number[]>([]); // Iniciar sem seleção
   const [isExporting, setIsExporting] = useState(false);
   const [selectedServersForExport, setSelectedServersForExport] = useState<string[]>([]);
 
@@ -604,7 +604,7 @@ const Reports: React.FC = () => {
 
   const handleOpenModal = (server: Server) => {
     setSelectedServer(server);
-    setSelectedWeeks([getCurrentWeekNumber()]);
+    setSelectedWeeks([]); // Iniciar sem semanas selecionadas
     setExpandedWeeks(new Set());
     setServerStats(null);
     setIsModalOpen(true);
