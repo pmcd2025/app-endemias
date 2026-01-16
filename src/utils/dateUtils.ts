@@ -61,7 +61,40 @@ export function getEpidemiologicalWeek(date: Date = new Date()): number {
  * Retorna as datas de início (Domingo) e fim (Sábado) de uma semana epidemiológica.
  */
 export function getEpidemiologicalWeekRange(year: number, week: number): { start: Date, end: Date } {
-    // Lógica inversa...
-    // Implementar se necessário futuramente
-    return { start: new Date(), end: new Date() };
+    // Encontrar o sábado da semana 1 do ano
+    const firstJan = new Date(year, 0, 1);
+    const dayOfWeek = firstJan.getDay();
+    let firstSaturdayJan = new Date(year, 0, 1 + (6 - dayOfWeek));
+
+    if (firstSaturdayJan.getDate() < 4) {
+        firstSaturdayJan.setDate(firstSaturdayJan.getDate() + 7);
+    }
+
+    // Calcular sábado da semana desejada
+    const endDate = new Date(firstSaturdayJan);
+    endDate.setDate(endDate.getDate() + (week - 1) * 7);
+
+    // Domingo é 6 dias antes do sábado
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 6);
+
+    return { start: startDate, end: endDate };
+}
+
+/**
+ * Retorna o início e fim do mês atual
+ */
+export function getCurrentMonthRange(): { start: Date, end: Date } {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { start, end };
+}
+
+/**
+ * Formata uma data para exibição curta (ex: "jan 04")
+ */
+export function formatShortDate(date: Date): string {
+    const months = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`;
 }

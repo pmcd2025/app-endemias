@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import SupervisorsModal from '../components/SupervisorsModal';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { getEpidemiologicalWeek } from '../utils/dateUtils';
+import { getEpidemiologicalWeek, getEpidemiologicalWeekRange, getCurrentMonthRange, formatShortDate } from '../utils/dateUtils';
 
 interface DashboardStats {
   serversCount: number;
@@ -54,16 +54,24 @@ const Dashboard: React.FC = () => {
   const [atestadosServers, setAtestadosServers] = useState<ServerWithStatus[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
+  // Estado para seletor de semana epidemiológica
+  const [selectedWeek, setSelectedWeek] = useState<number>(getEpidemiologicalWeek());
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [isWeekSelectorOpen, setIsWeekSelectorOpen] = useState(false);
+  const currentWeek = getEpidemiologicalWeek();
+
   useEffect(() => {
     if (userProfile) {
       fetchDashboardStats();
     }
-  }, [userProfile]);
+  }, [userProfile, selectedWeek, selectedYear]);
 
   const fetchDashboardStats = async () => {
     if (!userProfile) return;
 
     try {
+      setLoadingStats(true);
+
       // Construir query de servidores baseada no role do usuário
       let serversQuery = supabase.from('servers').select('id', { count: 'exact', head: true });
 
@@ -87,16 +95,10 @@ const Dashboard: React.FC = () => {
       const { data: serversData } = await (serverIdsQuery as any);
       const serverIds = serversData?.map((s: any) => s.id) || [];
 
-      // Fetch weekly records count (current year)
-      const currentYear = new Date().getFullYear();
-      let weeklyQuery = supabase.from('weekly_records').select('*', { count: 'exact', head: true }).eq('year', currentYear);
-      if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
-        weeklyQuery = weeklyQuery.in('server_id', serverIds);
-      }
-      const { count: weeklyRecordsCount } = await (weeklyQuery as any);
-
-      // Fetch total production from daily_entries
-      let productionQuery = supabase.from('weekly_records').select('id').eq('year', currentYear);
+      // Buscar produção total DA SEMANA SELECIONADA
+      let productionQuery = supabase.from('weekly_records').select('id')
+        .eq('year', selectedYear)
+        .eq('week_number', selectedWeek);
       if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
         productionQuery = productionQuery.in('server_id', serverIds);
       }
@@ -113,18 +115,24 @@ const Dashboard: React.FC = () => {
           sum + (entry.production || 0), 0) || 0;
       }
 
-      // Contar servidores em férias (baseado nos daily_entries com status 'Férias')
+      // Contar férias do MÊS ATUAL usando tabela vacations
       let vacationsCount = 0;
-      if (weeklyRecordIds.length > 0) {
-        const { count } = await (supabase
-          .from('daily_entries') as any)
-          .select('*', { count: 'exact', head: true })
-          .in('weekly_record_id', weeklyRecordIds)
-          .eq('status', 'Férias');
-        vacationsCount = count || 0;
-      }
+      const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+      const monthStartStr = monthStart.toISOString().split('T')[0];
+      const monthEndStr = monthEnd.toISOString().split('T')[0];
 
-      // Contar faltas (justificadas e sem justificativa)
+      let vacationsQuery = supabase.from('vacations')
+        .select('*', { count: 'exact', head: true })
+        .lte('period_start', monthEndStr)
+        .gte('period_end', monthStartStr);
+
+      if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
+        vacationsQuery = vacationsQuery.in('server_id', serverIds);
+      }
+      const { count: vacCount } = await (vacationsQuery as any);
+      vacationsCount = vacCount || 0;
+
+      // Contar faltas DA SEMANA SELECIONADA
       let faltasCount = 0;
       if (weeklyRecordIds.length > 0) {
         const { count: faltaJust } = await (supabase
@@ -142,9 +150,17 @@ const Dashboard: React.FC = () => {
         faltasCount = (faltaJust || 0) + (faltaSem || 0);
       }
 
-      // Contar atestados da tabela absences
+      // Contar atestados DA SEMANA SELECIONADA
       let atestadosCount = 0;
-      let atestadosQuery = supabase.from('absences').select('*', { count: 'exact', head: true });
+      const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
+      const weekStartStr = weekRange.start.toISOString().split('T')[0];
+      const weekEndStr = weekRange.end.toISOString().split('T')[0];
+
+      let atestadosQuery = supabase.from('absences')
+        .select('*', { count: 'exact', head: true })
+        .lte('start_date', weekEndStr)
+        .gte('end_date', weekStartStr);
+
       if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
         atestadosQuery = atestadosQuery.in('server_id', serverIds);
       }
@@ -153,7 +169,7 @@ const Dashboard: React.FC = () => {
 
       setStats({
         serversCount: serversCount || 0,
-        weeklyRecordsCount: weeklyRecordsCount || 0,
+        weeklyRecordsCount: 0, // Removido - não será usado
         totalProduction,
         vacationsCount,
         faltasCount,
@@ -166,7 +182,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Buscar detalhes de férias
+  // Buscar detalhes de férias do mês atual
   const fetchVacationDetails = async () => {
     if (!userProfile) return;
 
@@ -187,49 +203,42 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Buscar registros semanais com status Férias
-      const currentYear = new Date().getFullYear();
-      const { data: weeklyRecords } = await supabase
-        .from('weekly_records')
-        .select(`
-          id,
-          server_id,
-          week_number,
-          year,
-          daily_entries!inner (
-            status,
-            day_of_week
-          )
-        `)
-        .eq('year', currentYear)
-        .in('server_id', serverIds);
+      // Buscar férias do MÊS ATUAL da tabela vacations
+      const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+      const monthStartStr = monthStart.toISOString().split('T')[0];
+      const monthEndStr = monthEnd.toISOString().split('T')[0];
+      const currentMonthName = monthNames[monthStart.getMonth()];
 
-      // Filtrar registros com férias
-      const vacationData: ServerWithStatus[] = [];
-      const processedServers = new Set<string>();
+      let vacationsQuery = supabase
+        .from('vacations')
+        .select('*')
+        .lte('period_start', monthEndStr)
+        .gte('period_end', monthStartStr)
+        .order('period_start', { ascending: true });
 
-      (weeklyRecords || []).forEach((record: any) => {
-        const hasVacation = record.daily_entries.some((e: any) => e.status === 'Férias');
-        if (hasVacation && !processedServers.has(record.server_id)) {
-          const server = serversData.find((s: any) => s.id === record.server_id);
-          if (server) {
-            // Calcular mês aproximado baseado na semana
-            const weekStart = new Date(record.year, 0, 1);
-            weekStart.setDate(weekStart.getDate() + (record.week_number - 1) * 7);
-            const monthIndex = weekStart.getMonth();
+      if (userProfile.role !== 'super_admin') {
+        vacationsQuery = vacationsQuery.in('server_id', serverIds);
+      }
 
-            vacationData.push({
-              id: server.id,
-              name: server.name,
-              matricula: server.matricula,
-              status: 'Férias',
-              week_number: record.week_number,
-              year: record.year,
-              month: monthNames[monthIndex]
-            });
-            processedServers.add(record.server_id);
-          }
-        }
+      const { data: vacationsData } = await (vacationsQuery as any);
+
+      // Mapear para o formato esperado
+      const vacationData: ServerWithStatus[] = (vacationsData || []).map((vacation: any) => {
+        const server = serversData.find((s: any) => s.id === vacation.server_id);
+        const startDate = new Date(vacation.period_start);
+        const endDate = new Date(vacation.period_end);
+
+        return {
+          id: vacation.id,
+          name: server?.name || 'Desconhecido',
+          matricula: server?.matricula || '',
+          status: 'Férias',
+          start_date: vacation.period_start,
+          end_date: vacation.period_end,
+          days_count: vacation.days_count,
+          month: currentMonthName,
+          year: startDate.getFullYear()
+        };
       });
 
       setVacationServers(vacationData);
@@ -425,7 +434,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Servidores em Férias</h2>
-                  <p className="text-xs text-slate-400">Organizados por mês</p>
+                  <p className="text-xs text-slate-400">{monthNames[new Date().getMonth()]} de {new Date().getFullYear()}</p>
                 </div>
               </div>
               <button onClick={() => setIsVacationsModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
@@ -441,44 +450,36 @@ const Dashboard: React.FC = () => {
               ) : vacationServers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <span className="material-symbols-outlined text-4xl text-slate-500">event_available</span>
-                  <p className="text-sm text-slate-500">Nenhum servidor em férias no momento</p>
+                  <p className="text-sm text-slate-500">Nenhum servidor em férias neste mês</p>
                 </div>
               ) : (
-                // Agrupar por mês
-                (Object.entries(
-                  vacationServers.reduce((acc: Record<string, ServerWithStatus[]>, server) => {
-                    const month = server.month || 'Indefinido';
-                    if (!acc[month]) acc[month] = [];
-                    acc[month].push(server);
-                    return acc;
-                  }, {} as Record<string, ServerWithStatus[]>)
-                ) as [string, ServerWithStatus[]][]).map(([month, servers]) => (
-                  <div key={month} className="rounded-xl border border-blue-500/20 bg-blue-500/5 overflow-hidden">
-                    <div className="px-3 py-2 bg-blue-500/10 border-b border-blue-500/20 flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-400 uppercase">{month}</span>
-                      <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px] font-bold">
-                        {servers.length} servidor(es)
-                      </span>
+                <div className="space-y-2">
+                  {vacationServers.map((server) => (
+                    <div key={server.id} className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                      <div
+                        className="size-10 rounded-full bg-cover bg-center ring-2 ring-blue-500/30"
+                        style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=3b82f6&color=fff&size=72')` }}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-white">{server.name}</p>
+                        <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
+                        {server.start_date && server.end_date && (
+                          <p className="text-[10px] text-blue-400 mt-0.5">
+                            {new Date(server.start_date).toLocaleDateString('pt-BR')} - {new Date(server.end_date).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[9px] font-bold">
+                          FÉRIAS
+                        </span>
+                        {server.days_count && (
+                          <span className="text-[10px] text-slate-500">{server.days_count} dias</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="p-2 space-y-2">
-                      {servers.map((server) => (
-                        <div key={server.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#101922]">
-                          <div
-                            className="size-9 rounded-full bg-cover bg-center ring-1 ring-gray-700"
-                            style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=3b82f6&color=fff&size=72')` }}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-white">{server.name}</p>
-                            <p className="text-[10px] text-slate-500">Mat: {server.matricula} • Semana {server.week_number}</p>
-                          </div>
-                          <span className="px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[9px] font-bold">
-                            FÉRIAS
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -662,7 +663,7 @@ const Dashboard: React.FC = () => {
 
 
       {/* Seção de Resumo Geral */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {/* Nº Servidores */}
         <div className="flex flex-col p-4 rounded-2xl bg-[#1c2127] border border-gray-800 shadow-sm transition-all hover:border-primary/30">
           <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 w-fit mb-3">
@@ -676,35 +677,87 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Registros Semanais */}
-        <div className="flex flex-col p-4 rounded-2xl bg-[#1c2127] border border-gray-800 shadow-sm transition-all hover:border-primary/30">
-          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 w-fit mb-3">
-            <span className="material-symbols-outlined text-2xl">monitoring</span>
-          </div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Registros</p>
-          <p className="text-2xl font-bold text-white">
-            {loadingStats ? '...' : stats.weeklyRecordsCount}
-          </p>
-        </div>
-
-        {/* Produção Total */}
+        {/* Produção da Semana */}
         <div className="flex flex-col p-4 rounded-2xl bg-[#1c2127] border border-gray-800 shadow-sm transition-all hover:border-primary/30">
           <div className="p-2 rounded-xl bg-green-500/10 text-green-500 w-fit mb-3">
             <span className="material-symbols-outlined text-2xl">work_history</span>
           </div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produção Total</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produção Sem. {selectedWeek}</p>
           <p className="text-2xl font-bold text-white">
             {loadingStats ? '...' : stats.totalProduction.toLocaleString('pt-BR')}
           </p>
         </div>
 
-        {/* Resumo */}
-        <div className="flex flex-col p-4 rounded-2xl bg-[#1c2127] border border-gray-800 shadow-sm transition-all hover:border-primary/30">
+        {/* Card Semana Epidemiológica com Seletor */}
+        <div className="relative flex flex-col p-4 rounded-2xl bg-[#1c2127] border border-gray-800 shadow-sm transition-all hover:border-purple-500/30">
           <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500 w-fit mb-3">
-            <span className="material-symbols-outlined text-2xl">summarize</span>
+            <span className="material-symbols-outlined text-2xl">calendar_month</span>
           </div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Semana Atual</p>
-          <p className="text-2xl font-bold text-white">Sem. {getEpidemiologicalWeek()}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Semana Epidemiológica</p>
+
+          {/* Botão do Seletor */}
+          <button
+            onClick={() => setIsWeekSelectorOpen(!isWeekSelectorOpen)}
+            className="flex items-center gap-2 mt-1 hover:bg-purple-500/10 rounded-lg py-1 px-2 -ml-2 transition-colors group"
+          >
+            <p className="text-2xl font-bold text-white">Sem. {String(selectedWeek).padStart(2, '0')}</p>
+            <span className={`material-symbols-outlined text-purple-400 transition-transform ${isWeekSelectorOpen ? 'rotate-180' : ''}`}>
+              expand_more
+            </span>
+            {selectedWeek === currentWeek && (
+              <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[9px] font-bold">ATUAL</span>
+            )}
+          </button>
+
+          {/* Dropdown de Semanas */}
+          {isWeekSelectorOpen && (
+            <>
+              {/* Overlay para fechar ao clicar fora */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setIsWeekSelectorOpen(false)}
+              />
+
+              <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-[#1c2127]/95 backdrop-blur-xl border border-purple-500/30 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-2 border-b border-gray-800 bg-purple-500/5">
+                  <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">Selecione a Semana</p>
+                </div>
+                <div className="max-h-60 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-purple-500/30">
+                  {Array.from({ length: 52 }, (_, i) => i + 1).map(week => {
+                    const range = getEpidemiologicalWeekRange(selectedYear, week);
+                    const isSelected = week === selectedWeek;
+                    const isCurrent = week === currentWeek;
+
+                    return (
+                      <button
+                        key={week}
+                        onClick={() => {
+                          setSelectedWeek(week);
+                          setIsWeekSelectorOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all text-left ${isSelected
+                          ? 'bg-purple-500/20 border border-purple-500/40'
+                          : 'hover:bg-gray-800/50'
+                          }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold ${isSelected ? 'text-purple-400' : 'text-white'}`}>
+                            Semana {String(week).padStart(2, '0')}
+                          </span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[9px] font-bold">ATUAL</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500">
+                          {formatShortDate(range.start)} - {formatShortDate(range.end)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -724,9 +777,9 @@ const Dashboard: React.FC = () => {
               <span className="material-symbols-outlined text-2xl">beach_access</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Em Férias</p>
-              <p className="text-lg font-bold text-white">{loadingStats ? '...' : stats.vacationsCount} registro(s)</p>
-              <p className="text-[10px] text-slate-500">Clique para ver por mês</p>
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Férias no Mês</p>
+              <p className="text-lg font-bold text-white">{loadingStats ? '...' : stats.vacationsCount} servidor(es)</p>
+              <p className="text-[10px] text-slate-500">{monthNames[new Date().getMonth()]}</p>
             </div>
             <div className="size-8 flex items-center justify-center rounded-full text-blue-400 group-hover:bg-blue-500/20 transition-colors">
               <span className="material-symbols-outlined">chevron_right</span>
@@ -742,9 +795,9 @@ const Dashboard: React.FC = () => {
               <span className="material-symbols-outlined text-2xl">event_busy</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Faltas</p>
+              <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Faltas Sem. {selectedWeek}</p>
               <p className="text-lg font-bold text-white">{loadingStats ? '...' : stats.faltasCount} registro(s)</p>
-              <p className="text-[10px] text-slate-500">Clique para ver por semana</p>
+              <p className="text-[10px] text-slate-500">Na semana selecionada</p>
             </div>
             <div className="size-8 flex items-center justify-center rounded-full text-red-400 group-hover:bg-red-500/20 transition-colors">
               <span className="material-symbols-outlined">chevron_right</span>
@@ -760,9 +813,9 @@ const Dashboard: React.FC = () => {
               <span className="material-symbols-outlined text-2xl">healing</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Atestados</p>
+              <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Atestados Sem. {selectedWeek}</p>
               <p className="text-lg font-bold text-white">{loadingStats ? '...' : stats.atestadosCount} registro(s)</p>
-              <p className="text-[10px] text-slate-500">Clique para ver por semana</p>
+              <p className="text-[10px] text-slate-500">Na semana selecionada</p>
             </div>
             <div className="size-8 flex items-center justify-center rounded-full text-amber-400 group-hover:bg-amber-500/20 transition-colors">
               <span className="material-symbols-outlined">chevron_right</span>

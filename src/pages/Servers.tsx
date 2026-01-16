@@ -37,6 +37,10 @@ const Servers: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'hierarchy'>('hierarchy');
   const [hierarchyData, setHierarchyData] = useState<SupervisorGeralWithArea[]>([]);
 
+  // Estados para controle de expansão dos cards hierárquicos
+  const [expandedGerais, setExpandedGerais] = useState<Set<string>>(new Set());
+  const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
+
   const [formData, setFormData] = useState<NewServerForm>({
     nome: '',
     funcao: '',
@@ -211,6 +215,19 @@ const Servers: React.FC = () => {
     }
   };
 
+  // Função para buscar TODOS os supervisores de área (para cadastro de Supervisor Geral)
+  const fetchAllSupervisoresArea = async () => {
+    try {
+      const { data } = await (supabase.from('users') as any)
+        .select('id, name')
+        .eq('role', 'supervisor_area')
+        .order('name');
+      setSupervisoresArea(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar supervisores de área:', err);
+    }
+  };
+
   const handleSupervisorGeralChange = (id: string) => {
     setSelectedSupervisorGeral(id);
     setSelectedSupervisorArea('');
@@ -235,8 +252,16 @@ const Servers: React.FC = () => {
       return;
     }
 
-    if (!selectedSupervisorGeral || !selectedSupervisorArea) {
-      alert('Selecione o Supervisor Geral e o Supervisor de Área.');
+    // Validação condicional baseada na função
+    // Todos precisam de Supervisor Geral
+    if (!selectedSupervisorGeral) {
+      alert('Selecione o Supervisor Geral.');
+      return;
+    }
+
+    // Téc. Endemias e Supervisor Geral precisam de Supervisor de Área
+    if (formData.funcao !== 'Supervisor de Área' && !selectedSupervisorArea) {
+      alert('Selecione o Supervisor de Área.');
       return;
     }
 
@@ -248,8 +273,11 @@ const Servers: React.FC = () => {
         vinculo: formData.vinculo,
         matricula: formData.matricula,
         status: 'active',
+        // Todos têm supervisor_geral_id (hierarquia)
         supervisor_geral_id: selectedSupervisorGeral,
-        supervisor_area_id: selectedSupervisorArea
+        // Supervisor de Área não tem supervisor_area_id (ele É o supervisor de área)
+        // Téc. Endemias e Supervisor Geral TÊM supervisor_area_id (para registro de ponto)
+        supervisor_area_id: formData.funcao === 'Supervisor de Área' ? null : selectedSupervisorArea
       };
 
       const { data, error } = await supabase
@@ -260,7 +288,15 @@ const Servers: React.FC = () => {
 
       if (error) {
         console.error('Erro ao salvar servidor:', error);
-        alert('Erro ao salvar servidor. Tente novamente.');
+        console.error('Payload enviado:', newServer);
+
+        // Tratar erro de matrícula duplicada
+        if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('matricula')) {
+          alert('Esta matrícula já está cadastrada no sistema. Por favor, use uma matrícula diferente.');
+        } else {
+          alert(`Erro ao salvar servidor: ${error.message || error.code || 'Erro desconhecido'}`);
+        }
+
       } else {
         setServers(prev => [data, ...prev]);
         setIsModalOpen(false);
@@ -379,6 +415,28 @@ const Servers: React.FC = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Funções de toggle para expandir/colapsar cards hierárquicos
+  const toggleGeralExpanded = (id: string) => {
+    setExpandedGerais(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAreaExpanded = (id: string) => {
+    setExpandedAreas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Verificar se deve expandir automaticamente (quando há busca ativa)
+  const shouldAutoExpand = searchTerm.length > 0;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -522,107 +580,128 @@ const Servers: React.FC = () => {
           </div>
         )}
 
-        {/* Server List - Visualização Hierárquica em Cards Agrupados */}
+        {/* Server List - Visualização Hierárquica com Cards Colapsáveis */}
         {!isLoading && filteredServers.length > 0 && viewMode === 'hierarchy' && (
           <div className="flex flex-col gap-4">
-            {hierarchyData.map((supGeral) => (
-              <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-transparent overflow-hidden">
-                {/* Header Supervisor Geral */}
-                <div className="px-4 py-3 bg-blue-500/10 border-b border-blue-500/20 flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-blue-500/20">
-                    <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Supervisor Geral</p>
-                    <p className="text-sm font-bold text-white">{supGeral.name}</p>
-                  </div>
-                  <span className="px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold">
-                    {supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0)} servidores
-                  </span>
-                </div>
+            {hierarchyData.map((supGeral) => {
+              const isGeralExpanded = shouldAutoExpand || expandedGerais.has(supGeral.id);
+              const totalServidores = supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0);
 
-                {/* Supervisores de Área */}
-                <div className="p-3 space-y-3">
-                  {supGeral.supervisoresArea.map((supArea) => (
-                    <div key={supArea.id} className="rounded-xl border border-green-500/20 bg-green-500/5 overflow-hidden">
-                      {/* Header Supervisor de Área */}
-                      <div className="px-3 py-2 bg-green-500/10 border-b border-green-500/20 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-green-400 text-lg">person</span>
-                        <div className="flex-1">
-                          <p className="text-[9px] text-green-400 font-bold uppercase tracking-wider">Supervisor de Área</p>
-                          <p className="text-xs font-bold text-white">{supArea.name}</p>
-                        </div>
-                        <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 text-[9px] font-bold">
-                          {supArea.servidores.length}
-                        </span>
-                      </div>
+              return (
+                <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-transparent overflow-hidden shadow-lg">
+                  {/* Header Supervisor Geral - Clicável */}
+                  <button
+                    onClick={() => toggleGeralExpanded(supGeral.id)}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3 hover:from-blue-500/25 transition-all cursor-pointer"
+                  >
+                    <div className="p-2 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                      <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Supervisor Geral</p>
+                      <p className="text-sm font-bold text-white">{supGeral.name}</p>
+                    </div>
+                    <span className="px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
+                      {totalServidores} servidores
+                    </span>
+                    <span className={`material-symbols-outlined text-blue-400 transition-transform duration-300 ${isGeralExpanded ? 'rotate-180' : ''}`}>
+                      expand_more
+                    </span>
+                  </button>
 
-                      {/* Lista de Servidores */}
-                      <div className="p-2 space-y-2">
-                        {supArea.servidores
-                          .filter(server => {
-                            const matchesSearch = server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              server.matricula.includes(searchTerm);
-                            const targetStatus = filterMap[statusFilter];
-                            const matchesStatus = statusFilter === 'Todos' || server.status === targetStatus;
-                            return matchesSearch && matchesStatus;
-                          })
-                          .map((server) => (
-                            <div key={server.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all">
-                              <div className="relative">
-                                <div
-                                  className={`h-10 w-10 rounded-full bg-cover bg-center ${server.status === 'inactive' ? 'grayscale' : ''}`}
-                                  style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
-                                />
-                                <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1c2127] ${getStatusColor(server.status)}`} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-white truncate">{server.name}</p>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-[10px] text-slate-500">{server.role} • Mat: {server.matricula}</p>
-                                  {server.vinculo && (
-                                    <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase border ${server.vinculo === 'Efetivo'
-                                      ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20'
-                                      : 'bg-blue-400/10 text-blue-400 border-blue-400/20'
-                                      }`}>
-                                      {server.vinculo}
-                                    </span>
-                                  )}
-                                  {server.status === 'vacation' && <span className="px-1 py-0.5 rounded bg-amber-400/10 text-amber-500 text-[7px] font-bold uppercase border border-amber-400/20">Férias</span>}
-                                  {server.status === 'leave' && <span className="px-1 py-0.5 rounded bg-red-400/10 text-red-500 text-[7px] font-bold uppercase border border-red-400/20">Afastado</span>}
-                                </div>
-                              </div>
-                              <div className="flex gap-0.5">
-                                <button
-                                  onClick={() => handleEditClick(server)}
-                                  className="p-1.5 rounded-lg text-slate-500 hover:bg-primary/20 hover:text-primary transition-colors"
-                                >
-                                  <span className="material-symbols-outlined text-base">edit</span>
-                                </button>
-                                <button
-                                  onClick={(e) => handleDelete(server.id, e)}
-                                  className="p-1.5 rounded-lg text-slate-500 hover:bg-red-500/20 hover:text-red-500 transition-colors"
-                                >
-                                  <span className="material-symbols-outlined text-base">delete</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        {supArea.servidores.filter(server => {
+                  {/* Supervisores de Área - Colapsável */}
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isGeralExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="p-3 space-y-3">
+                      {supGeral.supervisoresArea.map((supArea) => {
+                        const areaKey = `${supGeral.id}-${supArea.id}`;
+                        const isAreaExpanded = shouldAutoExpand || expandedAreas.has(areaKey);
+                        const filteredAreaServers = supArea.servidores.filter(server => {
                           const matchesSearch = server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             server.matricula.includes(searchTerm);
                           const targetStatus = filterMap[statusFilter];
                           const matchesStatus = statusFilter === 'Todos' || server.status === targetStatus;
                           return matchesSearch && matchesStatus;
-                        }).length === 0 && (
-                            <p className="text-[10px] text-slate-500 text-center py-2">Nenhum servidor neste filtro</p>
-                          )}
-                      </div>
+                        });
+
+                        return (
+                          <div key={supArea.id} className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden">
+                            {/* Header Supervisor de Área - Clicável */}
+                            <button
+                              onClick={() => toggleAreaExpanded(areaKey)}
+                              className="w-full px-3 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center gap-2 hover:bg-emerald-500/15 transition-all cursor-pointer"
+                            >
+                              <div className="p-1.5 rounded-lg bg-emerald-500/20">
+                                <span className="material-symbols-outlined text-emerald-400 text-lg">person</span>
+                              </div>
+                              <div className="flex-1 text-left">
+                                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">Supervisor de Área</p>
+                                <p className="text-xs font-bold text-white">{supArea.name}</p>
+                              </div>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+                                {supArea.servidores.length}
+                              </span>
+                              <span className={`material-symbols-outlined text-emerald-400 text-lg transition-transform duration-300 ${isAreaExpanded ? 'rotate-180' : ''}`}>
+                                expand_more
+                              </span>
+                            </button>
+
+                            {/* Lista de Servidores - Colapsável */}
+                            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isAreaExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                              <div className="p-2 space-y-2">
+                                {filteredAreaServers.map((server) => (
+                                  <div key={server.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#1c2127] border border-gray-800 hover:border-primary/50 transition-all">
+                                    <div className="relative">
+                                      <div
+                                        className={`h-10 w-10 rounded-full bg-cover bg-center ${server.status === 'inactive' ? 'grayscale' : ''}`}
+                                        style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
+                                      />
+                                      <div className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full ring-2 ring-[#1c2127] ${getStatusColor(server.status)}`} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-bold text-white truncate">{server.name}</p>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <p className="text-[10px] text-slate-500">{server.role} • Mat: {server.matricula}</p>
+                                        {server.vinculo && (
+                                          <span className={`px-1 py-0.5 rounded text-[7px] font-bold uppercase border ${server.vinculo === 'Efetivo'
+                                            ? 'bg-emerald-400/10 text-emerald-500 border-emerald-400/20'
+                                            : 'bg-blue-400/10 text-blue-400 border-blue-400/20'
+                                            }`}>
+                                            {server.vinculo}
+                                          </span>
+                                        )}
+                                        {server.status === 'vacation' && <span className="px-1 py-0.5 rounded bg-amber-400/10 text-amber-500 text-[7px] font-bold uppercase border border-amber-400/20">Férias</span>}
+                                        {server.status === 'leave' && <span className="px-1 py-0.5 rounded bg-red-400/10 text-red-500 text-[7px] font-bold uppercase border border-red-400/20">Afastado</span>}
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-0.5">
+                                      <button
+                                        onClick={() => handleEditClick(server)}
+                                        className="p-1.5 rounded-lg text-slate-500 hover:bg-primary/20 hover:text-primary transition-colors"
+                                      >
+                                        <span className="material-symbols-outlined text-base">edit</span>
+                                      </button>
+                                      <button
+                                        onClick={(e) => handleDelete(server.id, e)}
+                                        className="p-1.5 rounded-lg text-slate-500 hover:bg-red-500/20 hover:text-red-500 transition-colors"
+                                      >
+                                        <span className="material-symbols-outlined text-base">delete</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                                {filteredAreaServers.length === 0 && (
+                                  <p className="text-[10px] text-slate-500 text-center py-2">Nenhum servidor neste filtro</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -698,7 +777,13 @@ const Servers: React.FC = () => {
                     <button
                       key={opcao}
                       type="button"
-                      onClick={() => setFormData({ ...formData, funcao: opcao })}
+                      onClick={() => {
+                        setFormData({ ...formData, funcao: opcao });
+                        // Limpar supervisores quando mudar função para evitar dados inconsistentes
+                        if (opcao === 'Supervisor Geral' || opcao === 'Supervisor de Área') {
+                          setSelectedSupervisorArea('');
+                        }
+                      }}
                       className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all ${formData.funcao === opcao
                         ? 'bg-primary/10 border-primary text-primary'
                         : 'bg-[#1c2127] border-gray-700 text-slate-300 active:bg-gray-700'
@@ -741,12 +826,17 @@ const Servers: React.FC = () => {
                 </div>
               </div>
 
-              {/* Seleção de Supervisor Geral */}
+              {/* Seleção de Supervisor Geral - Aparece para TODAS as funções */}
               <div className="flex flex-col gap-1.5 p-3 bg-blue-500/5 border border-blue-500/20 rounded-xl">
                 <label className="text-[10px] font-bold text-blue-400 uppercase tracking-wider px-0.5 flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm">account_tree</span>
                   Supervisor Geral (Obrigatório)
                 </label>
+                {formData.funcao === 'Supervisor Geral' && (
+                  <p className="text-[9px] text-blue-400/70 mb-1">
+                    Selecione o Supervisor Geral responsável pela hierarquia deste servidor.
+                  </p>
+                )}
                 <select
                   value={selectedSupervisorGeral}
                   onChange={(e) => handleSupervisorGeralChange(e.target.value)}
@@ -763,12 +853,22 @@ const Servers: React.FC = () => {
               </div>
 
               {/* Seleção de Supervisor de Área */}
-              {selectedSupervisorGeral && (
-                <div className="flex flex-col gap-1.5 p-3 bg-green-500/5 border border-green-500/20 rounded-xl">
-                  <label className="text-[10px] font-bold text-green-400 uppercase tracking-wider px-0.5 flex items-center gap-1">
+              {/* Aparece para Téc. Endemias e Supervisor Geral (após selecionar Supervisor Geral) */}
+              {/* Supervisor de Área NÃO precisa selecionar supervisor de área */}
+              {selectedSupervisorGeral && formData.funcao !== 'Supervisor de Área' && (
+                <div className={`flex flex-col gap-1.5 p-3 rounded-xl ${formData.funcao === 'Supervisor Geral' ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-green-500/5 border border-green-500/20'}`}>
+                  <label className={`text-[10px] font-bold uppercase tracking-wider px-0.5 flex items-center gap-1 ${formData.funcao === 'Supervisor Geral' ? 'text-amber-400' : 'text-green-400'}`}>
                     <span className="material-symbols-outlined text-sm">person</span>
-                    Supervisor de Área (Obrigatório)
+                    {formData.funcao === 'Supervisor Geral'
+                      ? 'Supervisor de Área (Responsável pelo Registro de Ponto)'
+                      : 'Supervisor de Área (Obrigatório)'
+                    }
                   </label>
+                  {formData.funcao === 'Supervisor Geral' && (
+                    <p className="text-[9px] text-amber-400/70 mb-1">
+                      Selecione o Supervisor de Área que será responsável por registrar o ponto deste Supervisor Geral.
+                    </p>
+                  )}
                   <select
                     value={selectedSupervisorArea}
                     onChange={(e) => setSelectedSupervisorArea(e.target.value)}
@@ -780,7 +880,9 @@ const Servers: React.FC = () => {
                     ))}
                   </select>
                   {supervisoresArea.length === 0 && (
-                    <p className="text-[10px] text-amber-500">Nenhum Supervisor de Área vinculado a este Supervisor Geral.</p>
+                    <p className="text-[10px] text-amber-500">
+                      Nenhum Supervisor de Área vinculado a este Supervisor Geral.
+                    </p>
                   )}
                 </div>
               )}
@@ -798,7 +900,16 @@ const Servers: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!formData.nome || !formData.funcao || !formData.vinculo || !selectedSupervisorGeral || !selectedSupervisorArea || isSaving}
+                  disabled={
+                    !formData.nome ||
+                    !formData.funcao ||
+                    !formData.vinculo ||
+                    // Todos precisam de Supervisor Geral
+                    !selectedSupervisorGeral ||
+                    // Téc. Endemias e Supervisor Geral precisam de supervisor_area_id
+                    (formData.funcao !== 'Supervisor de Área' && !selectedSupervisorArea) ||
+                    isSaving
+                  }
                   className="flex-1 py-3 rounded-xl bg-primary text-white font-bold text-sm shadow-lg shadow-primary/20 active:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSaving ? (
