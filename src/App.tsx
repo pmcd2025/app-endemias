@@ -7,6 +7,7 @@ import Servers from './pages/Servers';
 import Ponto from './pages/Ponto';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
+import SubmissionMonitoring from './pages/SubmissionMonitoring';
 import Layout from './components/Layout';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -55,9 +56,10 @@ const AppRoutes = () => {
         <Route path="/ponto" element={<Ponto />} />
         <Route path="/reports" element={<Reports />} />
 
-        {/* Rota protegida apenas para admin */}
+        {/* Rotas protegidas apenas para admin */}
         <Route element={<AdminRoute />}>
           <Route path="/users" element={<Users />} />
+          <Route path="/monitoring" element={<SubmissionMonitoring />} />
         </Route>
       </Route>
 

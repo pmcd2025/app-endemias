@@ -14,6 +14,7 @@ const Layout: React.FC = () => {
     { label: 'Ponto', icon: 'schedule', path: '/ponto' },
     { label: 'Servidores', icon: 'dns', path: '/servers' },
     { label: 'Relatórios', icon: 'analytics', path: '/reports' },
+    { label: 'Monitoramento', icon: 'monitoring', path: '/monitoring', adminOnly: true },
     { label: 'Usuários', icon: 'group', path: '/users', adminOnly: true }
   ];
 

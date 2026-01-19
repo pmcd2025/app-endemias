@@ -35,25 +35,51 @@ Sistema web para gerenciamento de ponto semanal dos servidores da Vigilância em
 
 ### ⏰ Registro de Ponto
 - Registro organizado por semana epidemiológica
+- **Visualização hierárquica colapsável** por Supervisor Geral → Supervisor de Área → Servidores
 - Status diário configuráveis:
   - ✅ Normal
-  - ❌ Falta
+  - ❌ Falta Justificada / Sem Justificativa
   - 🏖️ Férias
-  - 📅 Folga (Compensação)
-  - 🏥 Atestado
-  - 📚 Curso
-  - 🔧 Manutenção de Equipamento
+  - 🎉 Folga de Aniversário
+  - 🏛️ Feriado / Facultativo
 - Controle de dias trabalhados automático
 - Campo de produção semanal por servidor
+- **Campo de observações** (até 800 caracteres)
+- **Indicadores visuais de status**:
+  - 🔵 Botão "Registrar" (sem registro)
+  - 🟡 Badge "✓ Registrado" + Botão "Editar" (salvo)
+  - 🟢 Badge "✓ Enviado" + Botão "Ver" (enviado)
 - **Envio semanal** pelo Supervisor de Área com validações
+- **Botão "Limpar Semana"** para correção de erros:
+  - Admin: apaga todos os dados da semana
+  - Supervisores: apaga apenas dados da sua equipe
+- **Monitoramento de pendências** (Admin/Supervisor Geral):
+  - Alerta de servidores sem envio por hierarquia
 
 ### 📈 Relatórios
 - Relatórios por período e semana epidemiológica
 - Filtros por supervisor e status de submissão
+- **Visualização de observações** nos detalhes expandidos
 - Exportação individual e em lote:
   - **PDF** - Relatório formatado para impressão
   - **Excel** - Planilha detalhada com dados completos
 - Visualização de frequência e produção
+- Edição e exclusão de registros
+
+### 📊 Monitoramento de Envios (Admin)
+- **Exclusivo para Administradores** - Acesso restrito ao Admin geral
+- Visualização hierárquica de supervisores e status de envio
+- **Seletor multi-semana** - Selecione uma ou várias semanas para análise
+- **Painel de estatísticas**:
+  - Total de servidores
+  - Quantidade de enviados vs pendentes
+  - Taxa de conclusão geral
+- **Indicadores visuais por status**:
+  - 🟢 Completo (100% enviados)
+  - 🟡 Parcial (< 100% enviados)
+  - 🔴 Pendente (0% enviados)
+- **Filtros rápidos**: Todos, Pendentes, Completos
+- Expansão de hierarquia para ver detalhes por servidor
 
 ### 🔐 Autenticação
 - Login seguro com Supabase Auth
@@ -98,7 +124,8 @@ app_ponto/
 │   │   ├── Users.tsx           # Gestão de usuários
 │   │   ├── Servers.tsx         # Gestão de servidores
 │   │   ├── Ponto.tsx           # Registro de ponto semanal
-│   │   └── Reports.tsx         # Relatórios e exportações
+│   │   ├── Reports.tsx         # Relatórios e exportações
+│   │   └── SubmissionMonitoring.tsx # Monitoramento de envios (Admin)
 │   ├── App.tsx              # Componente principal e rotas
 │   ├── index.tsx            # Entrada da aplicação
 │   └── index.css            # Estilos globais Tailwind
