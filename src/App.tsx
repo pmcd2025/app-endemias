@@ -45,6 +45,27 @@ const AdminRoute = () => {
   return <Outlet />;
 };
 
+// Rota protegida para gestores e administradores
+const GestorOrAdminRoute = () => {
+  const { userProfile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#111419] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // super_admin e gestor podem acessar
+  const allowedRoles = ['super_admin', 'gestor'];
+  if (!allowedRoles.includes(userProfile?.role || '')) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
 const AppRoutes = () => {
   return (
     <Routes>
@@ -56,10 +77,14 @@ const AppRoutes = () => {
         <Route path="/ponto" element={<Ponto />} />
         <Route path="/reports" element={<Reports />} />
 
-        {/* Rotas protegidas apenas para admin */}
+        {/* Rota protegida para gestor e admin - Monitoramento */}
+        <Route element={<GestorOrAdminRoute />}>
+          <Route path="/monitoring" element={<SubmissionMonitoring />} />
+        </Route>
+
+        {/* Rota protegida apenas para admin - Usuários */}
         <Route element={<AdminRoute />}>
           <Route path="/users" element={<Users />} />
-          <Route path="/monitoring" element={<SubmissionMonitoring />} />
         </Route>
       </Route>
 
