@@ -3,6 +3,7 @@ import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import ProfileModal from './ProfileModal';
+import Footer from './Footer';
 
 const Layout: React.FC = () => {
   const navigate = useNavigate();
@@ -131,6 +132,10 @@ const Layout: React.FC = () => {
         <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 md:pb-0">
           <div className="w-full max-w-7xl mx-auto">
             <Outlet />
+          </div>
+          {/* Footer - visible on desktop */}
+          <div className="hidden md:block">
+            <Footer />
           </div>
         </div>
       </main>

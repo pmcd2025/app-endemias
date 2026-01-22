@@ -33,7 +33,7 @@ interface SupervisorGeralWithArea {
 
 const statusOptions = [
   'Normal', 'Férias', 'Falta Justificada', 'Falta Sem Justificativa',
-  'Feriado', 'Facultativo', 'Folga de Aniversário'
+  'Feriado', 'Facultativo', 'Folga de Aniversário', 'Atestado Médico'
 ];
 
 const initialDayState: DiaRegistro = { worked_days: 1, producao: '', status: 'Normal' };
@@ -49,8 +49,10 @@ interface DayRowProps {
 }
 
 const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, onDayChange, disabled = false }) => {
+  const isProductionDisabled = disabled || data.status !== 'Normal';
+
   const handleProductionStep = (step: number) => {
-    if (disabled) return;
+    if (isProductionDisabled) return;
     const current = parseFloat(data.producao) || 0;
     const next = Math.max(0, current + step);
     onDayChange(dayNum, 'producao', next.toString());
@@ -79,25 +81,25 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
           <div className="flex items-center gap-1">
             <button
               type="button"
-              disabled={disabled}
+              disabled={isProductionDisabled}
               onClick={() => handleProductionStep(-1)}
-              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
+              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
             >
               <span className="material-symbols-outlined text-sm">remove</span>
             </button>
             <input
               type="number"
-              disabled={disabled}
+              disabled={isProductionDisabled}
               placeholder="0"
               value={data.producao}
               onChange={(e) => onDayChange(dayNum, 'producao', e.target.value)}
-              className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none disabled:opacity-50"
+              className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             />
             <button
               type="button"
-              disabled={disabled}
+              disabled={isProductionDisabled}
               onClick={() => handleProductionStep(1)}
-              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
+              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
             >
               <span className="material-symbols-outlined text-sm">add</span>
             </button>

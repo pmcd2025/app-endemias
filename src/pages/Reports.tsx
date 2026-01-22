@@ -47,11 +47,12 @@ const statusColors: Record<string, { bg: string; text: string; abbrev: string }>
   'Feriado': { bg: 'bg-purple-500/20', text: 'text-purple-400', abbrev: 'FD' },
   'Facultativo': { bg: 'bg-cyan-500/20', text: 'text-cyan-400', abbrev: 'FA' },
   'Folga de Aniversário': { bg: 'bg-pink-500/20', text: 'text-pink-400', abbrev: 'AN' },
+  'Atestado Médico': { bg: 'bg-teal-500/20', text: 'text-teal-400', abbrev: 'AM' },
 };
 
 const statusOptions = [
   'Normal', 'Férias', 'Falta Justificada', 'Falta Sem Justificativa',
-  'Feriado', 'Facultativo', 'Folga de Aniversário'
+  'Feriado', 'Facultativo', 'Folga de Aniversário', 'Atestado Médico'
 ];
 
 const dayNames = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];

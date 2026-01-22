@@ -4,6 +4,8 @@ import SupervisorsModal from '../components/SupervisorsModal';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getEpidemiologicalWeek, getEpidemiologicalWeekRange, getCurrentMonthRange, formatShortDate } from '../utils/dateUtils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface DashboardStats {
   serversCount: number;
@@ -27,6 +29,9 @@ interface ServerWithStatus {
   type?: string;
   days_count?: number;
   cid_code?: string;
+  faltasJustificadas?: number;
+  faltasSemJustificativa?: number;
+  atestadosCount?: number;
 }
 
 const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -54,11 +59,17 @@ const Dashboard: React.FC = () => {
   const [atestadosServers, setAtestadosServers] = useState<ServerWithStatus[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // Estado para seletor de semana epidemiológica
+  // Estado para seletor de semana epidemiológica (0 = Todas as semanas)
   const [selectedWeek, setSelectedWeek] = useState<number>(getEpidemiologicalWeek());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [isWeekSelectorOpen, setIsWeekSelectorOpen] = useState(false);
   const currentWeek = getEpidemiologicalWeek();
+
+  // Estados para exportação PDF
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportType, setExportType] = useState<'faltas' | 'atestados'>('faltas');
+  const [exportWeeks, setExportWeeks] = useState<number[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     if (userProfile) {
@@ -95,10 +106,15 @@ const Dashboard: React.FC = () => {
       const { data: serversData } = await (serverIdsQuery as any);
       const serverIds = serversData?.map((s: any) => s.id) || [];
 
-      // Buscar produção total DA SEMANA SELECIONADA
+      // Buscar produção total (da semana selecionada ou do ano todo se selectedWeek === 0)
       let productionQuery = supabase.from('weekly_records').select('id')
-        .eq('year', selectedYear)
-        .eq('week_number', selectedWeek);
+        .eq('year', selectedYear);
+
+      // Se selectedWeek > 0, filtrar por semana específica
+      if (selectedWeek > 0) {
+        productionQuery = productionQuery.eq('week_number', selectedWeek);
+      }
+
       if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
         productionQuery = productionQuery.in('server_id', serverIds);
       }
@@ -150,22 +166,44 @@ const Dashboard: React.FC = () => {
         faltasCount = (faltaJust || 0) + (faltaSem || 0);
       }
 
-      // Contar atestados DA SEMANA SELECIONADA
+      // Contar atestados (tabela absences + status "Atestado Médico" em daily_entries)
       let atestadosCount = 0;
-      const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
-      const weekStartStr = weekRange.start.toISOString().split('T')[0];
-      const weekEndStr = weekRange.end.toISOString().split('T')[0];
 
+      // Contar da tabela absences - filtrar por semana ou ano
       let atestadosQuery = supabase.from('absences')
-        .select('*', { count: 'exact', head: true })
-        .lte('start_date', weekEndStr)
-        .gte('end_date', weekStartStr);
+        .select('*', { count: 'exact', head: true });
+
+      if (selectedWeek > 0) {
+        const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
+        const weekStartStr = weekRange.start.toISOString().split('T')[0];
+        const weekEndStr = weekRange.end.toISOString().split('T')[0];
+        atestadosQuery = atestadosQuery
+          .lte('start_date', weekEndStr)
+          .gte('end_date', weekStartStr);
+      } else {
+        // Todas as semanas do ano
+        atestadosQuery = atestadosQuery
+          .gte('start_date', `${selectedYear}-01-01`)
+          .lte('start_date', `${selectedYear}-12-31`);
+      }
 
       if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
         atestadosQuery = atestadosQuery.in('server_id', serverIds);
       }
       const { count: absCount } = await (atestadosQuery as any);
-      atestadosCount = absCount || 0;
+
+      // Contar status "Atestado Médico" em daily_entries
+      let atestadosDiarioCount = 0;
+      if (weeklyRecordIds.length > 0) {
+        const { count: atestadoDiario } = await (supabase
+          .from('daily_entries') as any)
+          .select('*', { count: 'exact', head: true })
+          .in('weekly_record_id', weeklyRecordIds)
+          .eq('status', 'Atestado Médico');
+        atestadosDiarioCount = atestadoDiario || 0;
+      }
+
+      atestadosCount = (absCount || 0) + atestadosDiarioCount;
 
       setStats({
         serversCount: serversCount || 0,
@@ -249,7 +287,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Buscar detalhes de faltas
+  // Buscar detalhes de faltas (agrupado por servidor e semana)
   const fetchFaltasDetails = async () => {
     if (!userProfile) return;
 
@@ -270,9 +308,8 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Buscar registros semanais com faltas
-      const currentYear = new Date().getFullYear();
-      const { data: weeklyRecords } = await supabase
+      // Buscar registros semanais com faltas (filtrado pela semana selecionada)
+      let weeklyQuery = supabase
         .from('weekly_records')
         .select(`
           id,
@@ -284,35 +321,74 @@ const Dashboard: React.FC = () => {
             day_of_week
           )
         `)
-        .eq('year', currentYear)
+        .eq('year', selectedYear)
         .in('server_id', serverIds);
 
-      // Agrupar faltas por servidor e semana
-      const faltasData: ServerWithStatus[] = [];
+      // Filtrar por semana específica se selectedWeek > 0
+      if (selectedWeek > 0) {
+        weeklyQuery = weeklyQuery.eq('week_number', selectedWeek);
+      }
+
+      const { data: weeklyRecords } = await weeklyQuery;
+
+      // Agrupar por servidor e semana (chave: server_id-week_number)
+      const faltasMap: Record<string, {
+        serverId: string;
+        serverName: string;
+        matricula: string;
+        weekNumber: number;
+        year: number;
+        faltasJustificadas: number;
+        faltasSemJustificativa: number;
+      }> = {};
 
       (weeklyRecords || []).forEach((record: any) => {
-        const faltas = record.daily_entries.filter((e: any) =>
-          e.status === 'Falta Justificada' || e.status === 'Falta Sem Justificativa'
-        );
+        const server = serversData.find((s: any) => s.id === record.server_id);
+        if (!server) return;
 
-        if (faltas.length > 0) {
-          const server = serversData.find((s: any) => s.id === record.server_id);
-          if (server) {
-            faltas.forEach((falta: any) => {
-              faltasData.push({
-                id: `${server.id}-${record.week_number}-${falta.day_of_week}`,
-                name: server.name,
-                matricula: server.matricula,
-                status: falta.status,
-                week_number: record.week_number,
-                year: record.year
-              });
-            });
-          }
+        const key = `${record.server_id}-${record.week_number}`;
+
+        if (!faltasMap[key]) {
+          faltasMap[key] = {
+            serverId: record.server_id,
+            serverName: server.name,
+            matricula: server.matricula,
+            weekNumber: record.week_number,
+            year: record.year,
+            faltasJustificadas: 0,
+            faltasSemJustificativa: 0
+          };
         }
+
+        record.daily_entries.forEach((entry: any) => {
+          if (entry.status === 'Falta Justificada') {
+            faltasMap[key].faltasJustificadas++;
+          } else if (entry.status === 'Falta Sem Justificativa') {
+            faltasMap[key].faltasSemJustificativa++;
+          }
+        });
       });
 
-      // Ordenar por semana
+      // Converter para array e filtrar apenas quem tem faltas
+      const faltasData: ServerWithStatus[] = Object.values(faltasMap)
+        .filter(item => item.faltasJustificadas > 0 || item.faltasSemJustificativa > 0)
+        .map(item => ({
+          id: `${item.serverId}-${item.weekNumber}`,
+          name: item.serverName,
+          matricula: item.matricula,
+          status: item.faltasJustificadas > 0 && item.faltasSemJustificativa > 0
+            ? 'Ambas'
+            : item.faltasJustificadas > 0
+              ? 'Falta Justificada'
+              : 'Falta Sem Justificativa',
+          week_number: item.weekNumber,
+          year: item.year,
+          faltasJustificadas: item.faltasJustificadas,
+          faltasSemJustificativa: item.faltasSemJustificativa,
+          days_count: item.faltasJustificadas + item.faltasSemJustificativa
+        }));
+
+      // Ordenar por semana (mais recente primeiro)
       faltasData.sort((a, b) => (b.week_number || 0) - (a.week_number || 0));
       setFaltasServers(faltasData);
     } catch (error) {
@@ -332,7 +408,8 @@ const Dashboard: React.FC = () => {
     setIsFaltasModalOpen(true);
   };
 
-  // Buscar detalhes de atestados
+  // Buscar detalhes de atestados (tabela absences + status "Atestado Médico" em daily_entries)
+  // Agrupado por servidor e semana
   const fetchAtestadosDetails = async () => {
     if (!userProfile) return;
 
@@ -353,11 +430,38 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Buscar atestados da tabela absences
+      // Map para agrupar por servidor e semana
+      const atestadosMap: Record<string, {
+        serverId: string;
+        serverName: string;
+        matricula: string;
+        weekNumber: number;
+        year: number;
+        atestadosCount: number;
+        daysCount: number;
+        cid_codes: string[];
+      }> = {};
+
+      // Buscar atestados da tabela absences (filtrado pela semana selecionada)
       let absencesQuery = supabase
         .from('absences')
         .select('*')
         .order('start_date', { ascending: false });
+
+      // Filtrar por semana específica ou ano
+      if (selectedWeek > 0) {
+        const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
+        const weekStartStr = weekRange.start.toISOString().split('T')[0];
+        const weekEndStr = weekRange.end.toISOString().split('T')[0];
+        absencesQuery = absencesQuery
+          .lte('start_date', weekEndStr)
+          .gte('end_date', weekStartStr);
+      } else {
+        // Todas as semanas do ano
+        absencesQuery = absencesQuery
+          .gte('start_date', `${selectedYear}-01-01`)
+          .lte('start_date', `${selectedYear}-12-31`);
+      }
 
       if (userProfile.role !== 'super_admin') {
         absencesQuery = absencesQuery.in('server_id', serverIds);
@@ -365,32 +469,104 @@ const Dashboard: React.FC = () => {
 
       const { data: absences } = await (absencesQuery as any);
 
-      // Calcular semana epidemiológica para cada atestado
-      const atestadosData: ServerWithStatus[] = (absences || []).map((absence: any) => {
+      // Processar absences
+      (absences || []).forEach((absence: any) => {
         const server = serversData.find((s: any) => s.id === absence.server_id);
+        if (!server) return;
+
         const startDate = new Date(absence.start_date);
-
-
-
-        // Calcular semana epidemiológica usando utilitário
         const weekNum = getEpidemiologicalWeek(startDate);
+        const year = startDate.getFullYear();
+        const key = `${absence.server_id}-${weekNum}-${year}`;
 
-        return {
-          id: absence.id,
-          name: server?.name || 'Desconhecido',
-          matricula: server?.matricula || '',
-          status: absence.type,
-          week_number: weekNum,
-          year: startDate.getFullYear(),
-          start_date: absence.start_date,
-          end_date: absence.end_date,
-          type: absence.type,
-          days_count: absence.days_count,
-          cid_code: absence.cid_code
-        };
+        if (!atestadosMap[key]) {
+          atestadosMap[key] = {
+            serverId: absence.server_id,
+            serverName: server.name,
+            matricula: server.matricula,
+            weekNumber: weekNum,
+            year: year,
+            atestadosCount: 0,
+            daysCount: 0,
+            cid_codes: []
+          };
+        }
+
+        atestadosMap[key].atestadosCount++;
+        atestadosMap[key].daysCount += absence.days_count || 1;
+        if (absence.cid_code && !atestadosMap[key].cid_codes.includes(absence.cid_code)) {
+          atestadosMap[key].cid_codes.push(absence.cid_code);
+        }
       });
 
-      setAtestadosServers(atestadosData);
+      // Buscar também registros diários com status "Atestado Médico" (filtrado pela semana selecionada)
+      let weeklyQuery = supabase
+        .from('weekly_records')
+        .select(`
+          id,
+          server_id,
+          week_number,
+          year,
+          daily_entries!inner (
+            status,
+            day_of_week
+          )
+        `)
+        .eq('year', selectedYear)
+        .in('server_id', serverIds);
+
+      // Filtrar por semana específica se selectedWeek > 0
+      if (selectedWeek > 0) {
+        weeklyQuery = weeklyQuery.eq('week_number', selectedWeek);
+      }
+
+      const { data: weeklyRecords } = await weeklyQuery;
+
+      // Processar daily_entries com status "Atestado Médico"
+      (weeklyRecords || []).forEach((record: any) => {
+        const server = serversData.find((s: any) => s.id === record.server_id);
+        if (!server) return;
+
+        const atestados = record.daily_entries.filter((e: any) => e.status === 'Atestado Médico');
+        if (atestados.length === 0) return;
+
+        const key = `${record.server_id}-${record.week_number}-${record.year}`;
+
+        if (!atestadosMap[key]) {
+          atestadosMap[key] = {
+            serverId: record.server_id,
+            serverName: server.name,
+            matricula: server.matricula,
+            weekNumber: record.week_number,
+            year: record.year,
+            atestadosCount: 0,
+            daysCount: 0,
+            cid_codes: []
+          };
+        }
+
+        atestadosMap[key].atestadosCount += atestados.length;
+        atestadosMap[key].daysCount += atestados.length; // Cada entrada = 1 dia
+      });
+
+      // Converter para array
+      const allAtestados: ServerWithStatus[] = Object.values(atestadosMap).map(item => ({
+        id: `${item.serverId}-${item.weekNumber}-${item.year}`,
+        name: item.serverName,
+        matricula: item.matricula,
+        status: 'Atestado Médico',
+        week_number: item.weekNumber,
+        year: item.year,
+        type: 'Atestado Médico',
+        days_count: item.daysCount,
+        atestadosCount: item.atestadosCount,
+        cid_code: item.cid_codes.join(', ')
+      }));
+
+      // Ordenar por semana (mais recente primeiro)
+      allAtestados.sort((a, b) => (b.week_number || 0) - (a.week_number || 0));
+
+      setAtestadosServers(allAtestados);
     } catch (error) {
       console.error('Error fetching atestados details:', error);
     } finally {
@@ -403,6 +579,119 @@ const Dashboard: React.FC = () => {
     setIsAtestadosModalOpen(true);
   };
 
+  // Função para exportar PDF de Faltas
+  const handleExportFaltasPDF = () => {
+    if (faltasServers.length === 0) {
+      alert('Não há dados para exportar.');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+
+      // Cabeçalho
+      doc.setFontSize(16);
+      doc.text('Relatório de Faltas - Endemias', 14, 20);
+
+      doc.setFontSize(10);
+      doc.text(`Período: ${selectedWeek === 0 ? `Ano ${selectedYear}` : `Semana ${selectedWeek}/${selectedYear}`}`, 14, 30);
+      doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 14, 35);
+      if (userProfile) {
+        doc.text(`Emitido por: ${userProfile.name}`, 14, 40);
+      }
+
+      // Preparar dados da tabela
+      const tableBody = faltasServers.map(server => [
+        `Semana ${String(server.week_number).padStart(2, '0')}`,
+        server.name,
+        server.matricula,
+        server.faltasJustificadas || 0,
+        server.faltasSemJustificativa || 0,
+        (server.faltasJustificadas || 0) + (server.faltasSemJustificativa || 0)
+      ]);
+
+      autoTable(doc, {
+        startY: 50,
+        head: [['Semana', 'Servidor', 'Matrícula', 'Justificadas', 'S/ Justif.', 'Total']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [239, 68, 68], textColor: 255 },
+        styles: { fontSize: 8 },
+        alternateRowStyles: { fillColor: [250, 250, 250] }
+      });
+
+      // Totais
+      const totalJust = faltasServers.reduce((sum, s) => sum + (s.faltasJustificadas || 0), 0);
+      const totalSem = faltasServers.reduce((sum, s) => sum + (s.faltasSemJustificativa || 0), 0);
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(10);
+      doc.text(`Total Justificadas: ${totalJust} | S/ Justificativa: ${totalSem} | Total Geral: ${totalJust + totalSem}`, 14, finalY);
+
+      doc.save(`relatorio_faltas_${selectedWeek === 0 ? 'ano' : 'sem' + selectedWeek}_${selectedYear}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Função para exportar PDF de Atestados
+  const handleExportAtestadosPDF = () => {
+    if (atestadosServers.length === 0) {
+      alert('Não há dados para exportar.');
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+
+      // Cabeçalho
+      doc.setFontSize(16);
+      doc.text('Relatório de Atestados Médicos - Endemias', 14, 20);
+
+      doc.setFontSize(10);
+      doc.text(`Período: ${selectedWeek === 0 ? `Ano ${selectedYear}` : `Semana ${selectedWeek}/${selectedYear}`}`, 14, 30);
+      doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 14, 35);
+      if (userProfile) {
+        doc.text(`Emitido por: ${userProfile.name}`, 14, 40);
+      }
+
+      // Preparar dados da tabela
+      const tableBody = atestadosServers.map(server => [
+        `Semana ${String(server.week_number).padStart(2, '0')}`,
+        server.name,
+        server.matricula,
+        server.days_count || 0,
+        server.cid_code || '-'
+      ]);
+
+      autoTable(doc, {
+        startY: 50,
+        head: [['Semana', 'Servidor', 'Matrícula', 'Dias', 'CID']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [245, 158, 11], textColor: 255 },
+        styles: { fontSize: 8 },
+        alternateRowStyles: { fillColor: [250, 250, 250] }
+      });
+
+      // Total
+      const totalDias = atestadosServers.reduce((sum, s) => sum + (s.days_count || 0), 0);
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      doc.setFontSize(10);
+      doc.text(`Total de Servidores: ${atestadosServers.length} | Total de Dias: ${totalDias}`, 14, finalY);
+
+      doc.save(`relatorio_atestados_${selectedWeek === 0 ? 'ano' : 'sem' + selectedWeek}_${selectedYear}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
 
   if (authLoading) {
@@ -500,12 +789,24 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Faltas Registradas</h2>
-                  <p className="text-xs text-slate-400">Organizadas por semana epidemiológica</p>
+                  <p className="text-xs text-slate-400">
+                    {selectedWeek === 0 ? `Ano ${selectedYear}` : `Semana ${selectedWeek}/${selectedYear}`}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setIsFaltasModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportFaltasPDF}
+                  disabled={isExporting || faltasServers.length === 0}
+                  className="px-3 py-2 flex items-center gap-1.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                  PDF
+                </button>
+                <button onClick={() => setIsFaltasModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -527,36 +828,47 @@ const Dashboard: React.FC = () => {
                     acc[week].push(server);
                     return acc;
                   }, {} as Record<string, ServerWithStatus[]>)
-                ) as [string, ServerWithStatus[]][]).sort(([a], [b]) => b.localeCompare(a)).map(([week, servers]) => (
-                  <div key={week} className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
-                    <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between">
-                      <span className="text-xs font-bold text-red-400 uppercase">{week} • {new Date().getFullYear()}</span>
-                      <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">
-                        {servers.length} falta(s)
-                      </span>
-                    </div>
-                    <div className="p-2 space-y-2">
-                      {servers.map((server, idx) => (
-                        <div key={`${server.id}-${idx}`} className="flex items-center gap-3 p-2 rounded-lg bg-[#101922]">
-                          <div
-                            className="size-9 rounded-full bg-cover bg-center ring-1 ring-gray-700"
-                            style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=ef4444&color=fff&size=72')` }}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-white">{server.name}</p>
-                            <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
+                ) as [string, ServerWithStatus[]][]).sort(([a], [b]) => b.localeCompare(a)).map(([week, servers]) => {
+                  // Calcular total de faltas na semana
+                  const totalFaltas = servers.reduce((sum, s) => sum + (s.days_count || 0), 0);
+
+                  return (
+                    <div key={week} className="rounded-xl border border-red-500/20 bg-red-500/5 overflow-hidden">
+                      <div className="px-3 py-2 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between">
+                        <span className="text-xs font-bold text-red-400 uppercase">{week} • {new Date().getFullYear()}</span>
+                        <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">
+                          {servers.length} servidor(es) • {totalFaltas} falta(s)
+                        </span>
+                      </div>
+                      <div className="p-2 space-y-2">
+                        {servers.map((server) => (
+                          <div key={server.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#101922]">
+                            <div
+                              className="size-9 rounded-full bg-cover bg-center ring-1 ring-gray-700"
+                              style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=ef4444&color=fff&size=72')` }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-white">{server.name}</p>
+                              <p className="text-[10px] text-slate-500">Mat: {server.matricula}</p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              {(server.faltasJustificadas || 0) > 0 && (
+                                <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-amber-500/20 text-amber-400">
+                                  {server.faltasJustificadas} JUSTIFICADA{(server.faltasJustificadas || 0) > 1 ? 'S' : ''}
+                                </span>
+                              )}
+                              {(server.faltasSemJustificativa || 0) > 0 && (
+                                <span className="px-2 py-0.5 rounded-lg text-[9px] font-bold bg-red-500/20 text-red-400">
+                                  {server.faltasSemJustificativa} S/ JUSTIF.
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span className={`px-2 py-1 rounded-lg text-[9px] font-bold ${server.status === 'Falta Justificada'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-red-500/20 text-red-400'
-                            }`}>
-                            {server.status === 'Falta Justificada' ? 'JUSTIFICADA' : 'S/ JUSTIF.'}
-                          </span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -577,12 +889,24 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Atestados Médicos</h2>
-                  <p className="text-xs text-slate-400">Organizados por semana epidemiológica</p>
+                  <p className="text-xs text-slate-400">
+                    {selectedWeek === 0 ? `Ano ${selectedYear}` : `Semana ${selectedWeek}/${selectedYear}`}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setIsAtestadosModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
-                <span className="material-symbols-outlined">close</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportAtestadosPDF}
+                  disabled={isExporting || atestadosServers.length === 0}
+                  className="px-3 py-2 flex items-center gap-1.5 rounded-lg bg-amber-500/20 text-amber-400 text-xs font-bold hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                  PDF
+                </button>
+                <button onClick={() => setIsAtestadosModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -604,36 +928,48 @@ const Dashboard: React.FC = () => {
                     acc[week].push(server);
                     return acc;
                   }, {} as Record<string, ServerWithStatus[]>)
-                ) as [string, ServerWithStatus[]][]).sort(([a], [b]) => b.localeCompare(a)).map(([week, servers]) => (
-                  <div key={week} className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
-                    <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-400 uppercase">{week} • {new Date().getFullYear()}</span>
-                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                        {servers.length} atestado(s)
-                      </span>
-                    </div>
-                    <div className="p-2 space-y-2">
-                      {servers.map((server, idx) => (
-                        <div key={`${server.id}-${idx}`} className="flex items-center gap-3 p-2 rounded-lg bg-[#101922]">
-                          <div
-                            className="size-9 rounded-full bg-cover bg-center ring-1 ring-gray-700"
-                            style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=f59e0b&color=fff&size=72')` }}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-bold text-white">{server.name}</p>
-                            <p className="text-[10px] text-slate-500">
-                              Mat: {server.matricula} • {server.days_count} dia(s)
-                              {server.cid_code && ` • CID: ${server.cid_code}`}
-                            </p>
+                ) as [string, ServerWithStatus[]][]).sort(([a], [b]) => b.localeCompare(a)).map(([week, servers]) => {
+                  // Calcular total de dias na semana
+                  const totalDias = servers.reduce((sum, s) => sum + (s.days_count || 0), 0);
+
+                  return (
+                    <div key={week} className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                      <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-400 uppercase">{week} • {new Date().getFullYear()}</span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                          {servers.length} servidor(es) • {totalDias} dia(s)
+                        </span>
+                      </div>
+                      <div className="p-2 space-y-2">
+                        {servers.map((server) => (
+                          <div key={server.id} className="flex items-center gap-3 p-2 rounded-lg bg-[#101922]">
+                            <div
+                              className="size-9 rounded-full bg-cover bg-center ring-1 ring-gray-700"
+                              style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${encodeURIComponent(server.name)}&background=f59e0b&color=fff&size=72')` }}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-white">{server.name}</p>
+                              <p className="text-[10px] text-slate-500">
+                                Mat: {server.matricula}
+                                {server.cid_code && ` • CID: ${server.cid_code}`}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 text-[9px] font-bold">
+                                {server.days_count} DIA{(server.days_count || 0) > 1 ? 'S' : ''}
+                              </span>
+                              {(server.atestadosCount || 0) > 1 && (
+                                <span className="text-[8px] text-slate-500">
+                                  {server.atestadosCount} atestado(s)
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-400 text-[9px] font-bold">
-                            {server.type || 'ATESTADO'}
-                          </span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -682,7 +1018,9 @@ const Dashboard: React.FC = () => {
           <div className="p-2 rounded-xl bg-green-500/10 text-green-500 w-fit mb-3">
             <span className="material-symbols-outlined text-2xl">work_history</span>
           </div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Produção Sem. {selectedWeek}</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            Produção {selectedWeek === 0 ? `Ano ${selectedYear}` : `Sem. ${selectedWeek}`}
+          </p>
           <p className="text-2xl font-bold text-white">
             {loadingStats ? '...' : stats.totalProduction.toLocaleString('pt-BR')}
           </p>
@@ -700,12 +1038,17 @@ const Dashboard: React.FC = () => {
             onClick={() => setIsWeekSelectorOpen(!isWeekSelectorOpen)}
             className="flex items-center gap-2 mt-1 hover:bg-purple-500/10 rounded-lg py-1 px-2 -ml-2 transition-colors group"
           >
-            <p className="text-2xl font-bold text-white">Sem. {String(selectedWeek).padStart(2, '0')}</p>
+            <p className="text-2xl font-bold text-white">
+              {selectedWeek === 0 ? 'Todas' : `Sem. ${String(selectedWeek).padStart(2, '0')}`}
+            </p>
             <span className={`material-symbols-outlined text-purple-400 transition-transform ${isWeekSelectorOpen ? 'rotate-180' : ''}`}>
               expand_more
             </span>
             {selectedWeek === currentWeek && (
               <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[9px] font-bold">ATUAL</span>
+            )}
+            {selectedWeek === 0 && (
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">ANO</span>
             )}
           </button>
 
@@ -723,6 +1066,30 @@ const Dashboard: React.FC = () => {
                   <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">Selecione a Semana</p>
                 </div>
                 <div className="max-h-60 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-purple-500/30">
+                  {/* Opção: Todas as Semanas */}
+                  <button
+                    onClick={() => {
+                      setSelectedWeek(0);
+                      setIsWeekSelectorOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all text-left ${selectedWeek === 0
+                      ? 'bg-emerald-500/20 border border-emerald-500/40'
+                      : 'hover:bg-gray-800/50'
+                      }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold ${selectedWeek === 0 ? 'text-emerald-400' : 'text-white'}`}>
+                        Todas as Semanas
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">ANO {selectedYear}</span>
+                    </div>
+                    <span className="material-symbols-outlined text-emerald-400 text-sm">calendar_view_month</span>
+                  </button>
+
+                  {/* Separador */}
+                  <div className="border-t border-gray-700 my-2"></div>
+
+                  {/* Semanas individuais */}
                   {Array.from({ length: 52 }, (_, i) => i + 1).map(week => {
                     const range = getEpidemiologicalWeekRange(selectedYear, week);
                     const isSelected = week === selectedWeek;
