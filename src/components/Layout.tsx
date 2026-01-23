@@ -142,7 +142,7 @@ const Layout: React.FC = () => {
 
       {/* Mobile Navigation */}
       <nav className="md:hidden fixed bottom-0 z-50 w-full bg-[#1c2127]/95 backdrop-blur-md border-t border-gray-800 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.3)]">
-        <div className={`grid h-16 ${navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        <div className={`grid h-16 ${navItems.length === 6 ? 'grid-cols-6' : navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <NavContent />
         </div>
       </nav>
