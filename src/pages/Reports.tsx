@@ -1318,6 +1318,7 @@ const Reports: React.FC = () => {
               {[1, 2, 3, 4, 5, 6].map(day => {
                 if (day === 6 && !editingRecord.saturday_active) return null;
                 const data = editWeekData[day] || { worked_days: 0, production: 0, status: 'Normal' };
+                const isFieldDisabled = data.status !== 'Normal';
                 return (
                   <div key={day} className="p-3 rounded-xl bg-[#101922] border border-gray-700 space-y-2">
                     <p className="text-xs font-bold text-primary">{dayNames[day]}</p>
@@ -1326,34 +1327,44 @@ const Reports: React.FC = () => {
                         <label className="text-[8px] text-slate-500 uppercase">Trabalhou</label>
                         <input
                           type="checkbox"
+                          disabled={isFieldDisabled}
                           checked={Number(data.worked_days) > 0}
                           onChange={(e) => setEditWeekData(prev => ({
                             ...prev,
                             [day]: { ...prev[day], worked_days: e.target.checked ? 1 : 0 }
                           }))}
-                          className="size-5 rounded border-gray-700 bg-[#1c2127] text-primary"
+                          className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary ${isFieldDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                         />
                       </div>
                       <div>
                         <label className="text-[8px] text-slate-500 uppercase">Produção</label>
                         <input
                           type="number"
+                          disabled={isFieldDisabled}
                           value={data.production || 0}
                           onChange={(e) => setEditWeekData(prev => ({
                             ...prev,
                             [day]: { ...prev[day], production: parseInt(e.target.value) || 0 }
                           }))}
-                          className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white"
+                          className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white ${isFieldDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         />
                       </div>
                       <div>
                         <label className="text-[8px] text-slate-500 uppercase">Status</label>
                         <select
                           value={data.status || 'Normal'}
-                          onChange={(e) => setEditWeekData(prev => ({
-                            ...prev,
-                            [day]: { ...prev[day], status: e.target.value }
-                          }))}
+                          onChange={(e) => {
+                            const newStatus = e.target.value;
+                            setEditWeekData(prev => ({
+                              ...prev,
+                              [day]: {
+                                ...prev[day],
+                                status: newStatus,
+                                // Quando status muda para diferente de Normal, zerar worked_days
+                                worked_days: newStatus === 'Normal' ? prev[day]?.worked_days || 1 : 0
+                              }
+                            }));
+                          }}
                           className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-[10px] p-2 text-white"
                         >
                           {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
