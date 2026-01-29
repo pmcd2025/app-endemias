@@ -79,6 +79,7 @@ const Reports: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editWeekData, setEditWeekData] = useState<Record<number, DailyEntry>>({});
   const [editWeekDetails, setEditWeekDetails] = useState<{ week: number; year: number }>({ week: 0, year: 0 }); // [NEW] State for week details
+  const [editNotes, setEditNotes] = useState<string>(''); // Estado para editar observações
   const [isSaving, setIsSaving] = useState(false);
 
   // Modal de exclusão
@@ -638,6 +639,7 @@ const Reports: React.FC = () => {
   const handleEditRecord = (record: WeeklyRecordWithDetails) => {
     setEditingRecord(record);
     setEditWeekDetails({ week: record.week_number, year: record.year }); // [NEW] Initialize week details
+    setEditNotes(record.notes || ''); // Inicializar observações para edição
     const data: Record<number, DailyEntry> = {};
     for (let day = 1; day <= 6; day++) {
       const entry = record.daily_entries.find(e => e.day_of_week === day);
@@ -652,12 +654,16 @@ const Reports: React.FC = () => {
 
     setIsSaving(true);
     try {
-      // 1. Atualizar detalhes da semana (se mudou)
-      if (editWeekDetails.week !== editingRecord.week_number || editWeekDetails.year !== editingRecord.year) {
+      // 1. Atualizar detalhes da semana e observações
+      const weekChanged = editWeekDetails.week !== editingRecord.week_number || editWeekDetails.year !== editingRecord.year;
+      const notesChanged = editNotes !== (editingRecord.notes || '');
+
+      if (weekChanged || notesChanged) {
         const { error: weekUpdateError } = await (supabase.from('weekly_records') as any)
           .update({
             week_number: editWeekDetails.week,
             year: editWeekDetails.year,
+            notes: editNotes || null, // Salvar observações
             updated_at: new Date().toISOString()
           })
           .eq('id', editingRecord.id);
@@ -1374,6 +1380,21 @@ const Reports: React.FC = () => {
                   </div>
                 );
               })}
+
+              {/* Campo de Observação */}
+              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-blue-400 text-sm">notes</span>
+                  <label className="text-xs font-bold text-blue-400 uppercase">Observação da Semana</label>
+                </div>
+                <textarea
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Adicione observações sobre esta semana..."
+                  rows={3}
+                  className="w-full bg-[#1c2127] border border-gray-700 rounded-lg text-sm p-3 text-white placeholder-slate-500 resize-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                />
+              </div>
             </div>
 
             <div className="p-4 border-t border-gray-800 flex gap-3">
