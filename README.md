@@ -15,6 +15,7 @@ Sistema web para gerenciamento de ponto semanal dos servidores da Vigilância em
 - Monitoramento de faltas e atestados por semana epidemiológica
 - Cards interativos com detalhamento em modais
 - Indicadores de servidores em férias, afastados e inativos
+- **Footer fixo** no rodapé com informações de versão e desenvolvedor
 
 ### 👥 Gestão de Usuários
 - Cadastro de usuários com diferentes níveis de acesso

@@ -129,14 +129,15 @@ const Layout: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 md:pb-0">
+        <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 md:pb-16">
           <div className="w-full max-w-7xl mx-auto">
             <Outlet />
           </div>
-          {/* Footer - visible on desktop */}
-          <div className="hidden md:block">
-            <Footer />
-          </div>
+        </div>
+
+        {/* Footer - fixed at bottom, visible on desktop */}
+        <div className="hidden md:block fixed bottom-0 left-64 right-0 z-30">
+          <Footer />
         </div>
       </main>
 
