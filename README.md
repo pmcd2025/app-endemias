@@ -216,12 +216,26 @@ npm run preview
 |--------|-----------|
 | `create-user` | Criação de usuários com autenticação automática |
 
-## 📱 Responsividade
+## 📱 Responsividade & Design Apple
 
-O sistema foi desenvolvido com abordagem **mobile-first**, garantindo excelente experiência em:
-- 📱 Smartphones
+O sistema foi desenvolvido com abordagem **mobile-first** e estética inspirada no design Apple:
+
+### Design Visual
+- 🎨 **Glassmorphism** - Efeitos de blur e transparência estilo iOS
+- 🔤 **SF Pro Font** - Fonte nativa Apple via `-apple-system` (fallback em outros sistemas)
+- 🌊 **Transições suaves** - Animações spring/ease Apple-like
+- 🔲 **Border radius contínuo** - Cantos arredondados estilo squircle
+
+### Suporte PWA/iOS
+- 📲 **apple-mobile-web-app-capable** - Modo standalone no iOS
+- 📱 **apple-touch-icon** - Ícone personalizado para home screen
+- 🔒 **Safe Area** - Padding automático para notch e home indicator
+- 🎯 **Touch feedback** - Resposta visual em toques mobile
+
+### Dispositivos Suportados
+- 📱 Smartphones (iOS e Android)
 - 📲 Tablets
-- 💻 Desktops
+- 💻 Desktops (Windows, macOS, Linux)
 
 ## 👨‍💻 Scripts Disponíveis
 

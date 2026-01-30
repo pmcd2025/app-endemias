@@ -60,11 +60,11 @@ const Layout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background-dark text-white flex flex-col md:flex-row">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-[#1c2127] border-r border-gray-800 p-4 shrink-0 transition-all">
+      {/* Desktop Sidebar - Apple Glassmorphism */}
+      <aside className="hidden md:flex flex-col w-64 bg-surface-dark/95 backdrop-blur-xl border-r border-border-dark/50 p-4 shrink-0 transition-all duration-300">
         <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-          <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="material-symbols-outlined text-white">schedule</span>
+          <div className="size-9 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/25">
+            <span className="material-symbols-outlined text-white text-xl">schedule</span>
           </div>
           <h1 className="font-bold text-lg tracking-tight">Divisão de Endemias</h1>
         </div>
@@ -72,10 +72,10 @@ const Layout: React.FC = () => {
         {/* User Profile Summary */}
         <div
           onClick={() => setIsProfileModalOpen(true)}
-          className="mx-2 mb-6 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-gray-700 transition-all cursor-pointer group"
+          className="mx-2 mb-6 p-3 rounded-xl bg-surface-elevated/50 border border-border-dark/50 hover:bg-surface-secondary/50 hover:border-border-light transition-all cursor-pointer group"
         >
           <div className="flex items-center gap-3">
-            <div className="size-10 rounded-full bg-gray-700 shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-primary/50 transition-all">
+            <div className="size-10 rounded-full bg-surface-secondary shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-primary/50 transition-all">
               <img
                 src={userProfile?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(userProfile?.name || 'User')}&background=3b82f6&color=fff`}
                 alt="Profile"
@@ -84,7 +84,7 @@ const Layout: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">{userProfile?.name || 'Usuário'}</p>
-              <p className="text-xs text-gray-400 truncate capitalize">{userProfile?.role?.replace('_', ' ') || 'Cargo'}</p>
+              <p className="text-xs text-text-secondary truncate capitalize">{userProfile?.role?.replace('_', ' ') || 'Cargo'}</p>
             </div>
           </div>
         </div>
@@ -93,10 +93,10 @@ const Layout: React.FC = () => {
           <NavContent />
         </nav>
 
-        <div className="mt-auto pt-8 border-t border-gray-800">
+        <div className="mt-auto pt-8 border-t border-border-dark">
           <button
             onClick={signOut}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-text-secondary hover:text-danger hover:bg-danger/10 transition-colors"
           >
             <span className="material-symbols-outlined">logout</span>
             <span className="text-sm font-medium">Sair</span>
@@ -107,7 +107,7 @@ const Layout: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Mobile Header with Profile */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#1c2127] border-b border-gray-800 sticky top-0 z-40">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-surface-dark/95 backdrop-blur-lg border-b border-border-dark/50 sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <div className="size-7 rounded-lg bg-primary flex items-center justify-center">
               <span className="material-symbols-outlined text-white text-lg">schedule</span>
@@ -141,8 +141,8 @@ const Layout: React.FC = () => {
         </div>
       </main>
 
-      {/* Mobile Navigation */}
-      <nav className="md:hidden fixed bottom-0 z-50 w-full bg-[#1c2127]/95 backdrop-blur-md border-t border-gray-800 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.3)]">
+      {/* Mobile Navigation - Apple-style Glassmorphism */}
+      <nav className="md:hidden fixed bottom-0 z-50 w-full glass border-t border-white/10 pb-safe shadow-[0_-8px_32px_rgba(0,0,0,0.4)]">
         <div className={`grid h-16 ${navItems.length === 6 ? 'grid-cols-6' : navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <NavContent />
         </div>

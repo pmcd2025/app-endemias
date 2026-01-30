@@ -2,14 +2,14 @@ import React from 'react';
 
 const Footer: React.FC = () => {
     return (
-        <footer className="w-full py-4 px-6 bg-[#1c2127] border-t border-gray-800 text-center text-gray-400 text-xs">
+        <footer className="w-full py-4 px-6 bg-surface-dark/95 backdrop-blur-lg border-t border-border-dark/50 text-center text-text-secondary text-xs">
             <div className="max-w-7xl mx-auto space-y-1">
                 <p>
-                    <span className="font-semibold text-gray-300">Versão 2.0.0</span>
-                    <span className="mx-2">|</span>
-                    <span>Desenvolvedor: <span className="text-primary">Elissandro Oliveira</span></span>
+                    <span className="font-semibold text-white/90">Versão 2.0.0</span>
+                    <span className="mx-2 text-border-light">|</span>
+                    <span>Desenvolvedor: <span className="text-primary font-medium">Elissandro Oliveira</span></span>
                 </p>
-                <p>
+                <p className="text-text-tertiary">
                     © {new Date().getFullYear()} Todos os direitos reservados - Divisão Endemias - Itabuna
                 </p>
             </div>
