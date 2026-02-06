@@ -39,6 +39,18 @@ interface SupervisorGeralWithArea {
   }[];
 }
 
+// Interface para análise de faltas e atestados por servidor
+interface ServerAbsenceAnalysis {
+  serverId: string;
+  serverName: string;
+  matricula: string;
+  supervisorAreaName: string;
+  faltasSemJustificativa: number;
+  faltasJustificadas: number;
+  atestadosMedicos: number;
+  totalOcorrencias: number;
+}
+
 const statusColors: Record<string, { bg: string; text: string; abbrev: string }> = {
   'Normal': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', abbrev: 'N' },
   'Férias': { bg: 'bg-blue-500/20', text: 'text-blue-400', abbrev: 'FE' },
@@ -107,6 +119,20 @@ const Reports: React.FC = () => {
   const [batchExportWeeks, setBatchExportWeeks] = useState<number[]>([]); // Iniciar sem seleção
   const [isExporting, setIsExporting] = useState(false);
   const [selectedServersForExport, setSelectedServersForExport] = useState<string[]>([]);
+
+  // Estados para aba de Análise Semanal
+  const [activeTab, setActiveTab] = useState<'servidores' | 'analise'>('servidores');
+  const [analysisData, setAnalysisData] = useState<ServerAbsenceAnalysis[]>([]);
+  const [analysisYear, setAnalysisYear] = useState(new Date().getFullYear());
+  const [analysisWeeks, setAnalysisWeeks] = useState<number[]>([]);
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
+  const [analysisSortBy, setAnalysisSortBy] = useState<'total' | 'faltasSem' | 'faltasJust' | 'atestados'>('total');
+  const [analysisStats, setAnalysisStats] = useState({
+    totalFaltasSem: 0,
+    totalFaltasJust: 0,
+    totalAtestados: 0,
+    totalGeral: 0
+  });
 
   const years = Array.from({ length: 6 }, (_, i) => (2025 + i));
   const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
@@ -296,6 +322,269 @@ const Reports: React.FC = () => {
     } finally {
       setIsLoadingRecords(false);
     }
+  };
+
+  // Função para buscar dados de análise semanal
+  const fetchAbsenceAnalysis = async () => {
+    if (!userProfile || analysisWeeks.length === 0) return;
+
+    setIsLoadingAnalysis(true);
+    try {
+      // Buscar todos os servidores com seus supervisores
+      let serversQuery = supabase.from('servers').select('id, name, matricula, supervisor_area_id').order('name') as any;
+
+      if (userProfile.role === 'supervisor_area') {
+        serversQuery = serversQuery.eq('supervisor_area_id', userProfile.id);
+      } else if (userProfile.role === 'supervisor_geral') {
+        serversQuery = serversQuery.eq('supervisor_geral_id', userProfile.id);
+      }
+
+      const { data: serversData, error: serversError } = await serversQuery;
+      if (serversError) throw serversError;
+
+      if (!serversData || serversData.length === 0) {
+        setAnalysisData([]);
+        setAnalysisStats({ totalFaltasSem: 0, totalFaltasJust: 0, totalAtestados: 0, totalGeral: 0 });
+        return;
+      }
+
+      const serverIds = serversData.map(s => s.id);
+
+      // Buscar nomes dos supervisores de área
+      const supervisorAreaIds = [...new Set(serversData.map(s => s.supervisor_area_id).filter(Boolean))];
+      let supervisorNames: Record<string, string> = {};
+
+      if (supervisorAreaIds.length > 0) {
+        const { data: supervisorsData } = await (supabase.from('users') as any)
+          .select('id, name')
+          .in('id', supervisorAreaIds);
+
+        supervisorsData?.forEach((sup: any) => {
+          supervisorNames[sup.id] = sup.name;
+        });
+      }
+
+      // Buscar registros semanais com entradas diárias
+      const { data: weeklyRecords, error: weeklyError } = await supabase
+        .from('weekly_records')
+        .select(`
+          id,
+          server_id,
+          week_number,
+          year,
+          daily_entries (
+            id,
+            status
+          )
+        `)
+        .eq('year', analysisYear)
+        .in('week_number', analysisWeeks)
+        .in('server_id', serverIds);
+
+      if (weeklyError) throw weeklyError;
+
+      // Processar dados por servidor
+      const analysisMap: Record<string, ServerAbsenceAnalysis> = {};
+
+      // Inicializar todos os servidores com zeros
+      serversData.forEach(server => {
+        analysisMap[server.id] = {
+          serverId: server.id,
+          serverName: server.name,
+          matricula: server.matricula,
+          supervisorAreaName: supervisorNames[server.supervisor_area_id] || 'Sem Supervisor',
+          faltasSemJustificativa: 0,
+          faltasJustificadas: 0,
+          atestadosMedicos: 0,
+          totalOcorrencias: 0
+        };
+      });
+
+      // Contabilizar ocorrências
+      (weeklyRecords || []).forEach((record: any) => {
+        const entries = record.daily_entries || [];
+        entries.forEach((entry: any) => {
+          if (!analysisMap[record.server_id]) return;
+
+          if (entry.status === 'Falta Sem Justificativa') {
+            analysisMap[record.server_id].faltasSemJustificativa++;
+          } else if (entry.status === 'Falta Justificada') {
+            analysisMap[record.server_id].faltasJustificadas++;
+          } else if (entry.status === 'Atestado Médico') {
+            analysisMap[record.server_id].atestadosMedicos++;
+          }
+        });
+      });
+
+      // Calcular totais e filtrar apenas quem tem ocorrências
+      let totalFaltasSem = 0;
+      let totalFaltasJust = 0;
+      let totalAtestados = 0;
+
+      const analysisArray = Object.values(analysisMap).map(item => {
+        item.totalOcorrencias = item.faltasSemJustificativa + item.faltasJustificadas + item.atestadosMedicos;
+        totalFaltasSem += item.faltasSemJustificativa;
+        totalFaltasJust += item.faltasJustificadas;
+        totalAtestados += item.atestadosMedicos;
+        return item;
+      }).filter(item => item.totalOcorrencias > 0);
+
+      // Ordenar por critério selecionado
+      analysisArray.sort((a, b) => {
+        switch (analysisSortBy) {
+          case 'faltasSem':
+            return b.faltasSemJustificativa - a.faltasSemJustificativa;
+          case 'faltasJust':
+            return b.faltasJustificadas - a.faltasJustificadas;
+          case 'atestados':
+            return b.atestadosMedicos - a.atestadosMedicos;
+          default:
+            return b.totalOcorrencias - a.totalOcorrencias;
+        }
+      });
+
+      setAnalysisData(analysisArray);
+      setAnalysisStats({
+        totalFaltasSem,
+        totalFaltasJust,
+        totalAtestados,
+        totalGeral: totalFaltasSem + totalFaltasJust + totalAtestados
+      });
+    } catch (err) {
+      console.error('Erro ao buscar análise:', err);
+    } finally {
+      setIsLoadingAnalysis(false);
+    }
+  };
+
+  // Effect para buscar análise quando mudar filtros
+  useEffect(() => {
+    if (activeTab === 'analise' && analysisWeeks.length > 0) {
+      fetchAbsenceAnalysis();
+    }
+  }, [activeTab, analysisYear, analysisWeeks, analysisSortBy]);
+
+  // Toggle semana para análise
+  const handleToggleAnalysisWeek = (week: number) => {
+    setAnalysisWeeks(prev =>
+      prev.includes(week) ? prev.filter(w => w !== week) : [...prev, week].sort((a, b) => a - b)
+    );
+  };
+
+  // Exportar PDF do ranking de análise
+  const handleExportAnalysisPDF = () => {
+    if (analysisData.length === 0) return;
+
+    const doc = new jsPDF();
+
+    // Cabeçalho
+    doc.setFontSize(18);
+    doc.text('Ranking de Ocorrências', 14, 20);
+
+    doc.setFontSize(10);
+    doc.text(`Período: Semanas ${analysisWeeks.join(', ')} / ${analysisYear}`, 14, 30);
+    doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 14, 35);
+    if (userProfile) {
+      doc.text(`Emitido por: ${userProfile.name}`, 14, 40);
+    }
+
+    // Resumo
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Resumo Geral:', 14, 52);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Faltas Sem Justificativa: ${analysisStats.totalFaltasSem}`, 14, 58);
+    doc.text(`Faltas Justificadas: ${analysisStats.totalFaltasJust}`, 80, 58);
+    doc.text(`Atestados Médicos: ${analysisStats.totalAtestados}`, 140, 58);
+
+    // Tabela de ranking
+    const tableBody = analysisData.map((item, index) => [
+      index + 1,
+      item.serverName,
+      item.matricula,
+      item.faltasSemJustificativa,
+      item.faltasJustificadas,
+      item.atestadosMedicos,
+      item.totalOcorrencias
+    ]);
+
+    // Linha de totais
+    tableBody.push([
+      '',
+      'TOTAL GERAL',
+      '',
+      analysisStats.totalFaltasSem,
+      analysisStats.totalFaltasJust,
+      analysisStats.totalAtestados,
+      analysisStats.totalGeral
+    ]);
+
+    autoTable(doc, {
+      startY: 65,
+      head: [['#', 'Servidor', 'Matrícula', 'S/Just.', 'Justif.', 'Atestado', 'Total']],
+      body: tableBody,
+      theme: 'grid',
+      headStyles: { fillColor: [239, 68, 68], textColor: 255, fontSize: 8 },
+      styles: { fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 10, halign: 'center' },
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 18, halign: 'center' },
+        5: { cellWidth: 18, halign: 'center' },
+        6: { cellWidth: 15, halign: 'center', fontStyle: 'bold' }
+      },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      didParseCell: function (data) {
+        // Estilizar a última linha (totais)
+        if (data.row.index === tableBody.length - 1) {
+          data.cell.styles.fillColor = [147, 51, 234];
+          data.cell.styles.textColor = 255;
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    doc.save(`ranking_ocorrencias_sem${analysisWeeks.join('-')}_${analysisYear}.pdf`);
+  };
+
+  // Exportar Excel do ranking de análise
+  const handleExportAnalysisExcel = () => {
+    if (analysisData.length === 0) return;
+
+    const data = analysisData.map((item, index) => ({
+      'Posição': index + 1,
+      'Servidor': item.serverName,
+      'Matrícula': item.matricula,
+      'Supervisor de Área': item.supervisorAreaName,
+      'Faltas S/Justificativa': item.faltasSemJustificativa,
+      'Faltas Justificadas': item.faltasJustificadas,
+      'Atestados Médicos': item.atestadosMedicos,
+      'Total Ocorrências': item.totalOcorrencias
+    }));
+
+    // Linha de totais
+    data.push({
+      'Posição': '',
+      'Servidor': 'TOTAL GERAL',
+      'Matrícula': '',
+      'Supervisor de Área': '',
+      'Faltas S/Justificativa': analysisStats.totalFaltasSem,
+      'Faltas Justificadas': analysisStats.totalFaltasJust,
+      'Atestados Médicos': analysisStats.totalAtestados,
+      'Total Ocorrências': analysisStats.totalGeral
+    } as any);
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ranking');
+
+    const wscols = [
+      { wch: 8 }, { wch: 30 }, { wch: 12 }, { wch: 25 },
+      { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+    ];
+    worksheet['!cols'] = wscols;
+
+    XLSX.writeFile(workbook, `ranking_ocorrencias_sem${analysisWeeks.join('-')}_${analysisYear}.xlsx`);
   };
 
   const handleExportPDF = () => {
@@ -835,9 +1124,10 @@ const Reports: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-full pb-6 bg-background-dark">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-gradient-to-r from-[#101922] via-[#1c2127] to-[#101922] border-b border-gray-800/50 px-4 py-4">
-        <div className="flex items-center justify-between">
+      {/* Header com Tabs */}
+      <header className="sticky top-0 z-10 bg-gradient-to-r from-[#101922] via-[#1c2127] to-[#101922] border-b border-gray-800/50">
+        {/* Top Bar */}
+        <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30">
               <span className="material-symbols-outlined text-amber-500">analytics</span>
@@ -845,13 +1135,12 @@ const Reports: React.FC = () => {
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white">Relatórios de Ponto</h1>
               <p className="text-[10px] text-slate-500 uppercase tracking-wider">
-                Selecione um servidor para ver detalhes
+                {activeTab === 'servidores' ? 'Selecione um servidor para ver detalhes' : 'Ranking de ocorrências por servidor'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Botões de exportação em lote */}
-            {userProfile && (
+            {activeTab === 'servidores' && userProfile && (
               <button
                 onClick={() => setIsBatchExportModalOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 hover:from-amber-500/30 hover:to-orange-500/30 transition-all text-[10px] font-bold"
@@ -865,124 +1154,383 @@ const Reports: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 pb-2">
+          <button
+            onClick={() => setActiveTab('servidores')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'servidores'
+              ? 'bg-primary text-white shadow-lg shadow-primary/30'
+              : 'bg-gray-800/50 text-slate-400 hover:bg-gray-800 hover:text-white'
+              }`}
+          >
+            <span className="material-symbols-outlined text-sm">group</span>
+            Servidores
+          </button>
+          <button
+            onClick={() => setActiveTab('analise')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'analise'
+              ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg shadow-red-500/30'
+              : 'bg-gray-800/50 text-slate-400 hover:bg-gray-800 hover:text-white'
+              }`}
+          >
+            <span className="material-symbols-outlined text-sm">trending_up</span>
+            Análise Semanal
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 p-4 space-y-4">
-        {/* Busca */}
-        <div className="relative">
-          <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
-            <span className="material-symbols-outlined text-xl">search</span>
-          </span>
-          <input
-            className="block w-full rounded-xl border border-gray-800 bg-[#1c2127] py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary focus:border-primary shadow-sm transition-all"
-            placeholder="Buscar por nome ou matrícula..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+        {/* Aba Servidores */}
+        {activeTab === 'servidores' && (
+          <>
+            {/* Busca */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
+                <span className="material-symbols-outlined text-xl">search</span>
+              </span>
+              <input
+                className="block w-full rounded-xl border border-gray-800 bg-[#1c2127] py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:ring-2 focus:ring-primary focus:border-primary shadow-sm transition-all"
+                placeholder="Buscar por nome ou matrícula..."
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
 
-        {/* Loading */}
-        {isLoadingServers && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="size-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-sm text-slate-500 font-medium">Carregando servidores...</p>
-          </div>
+            {/* Loading */}
+            {isLoadingServers && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="size-10 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-sm text-slate-500 font-medium">Carregando servidores...</p>
+              </div>
+            )}
+
+            {/* Lista Hierárquica com Cards Colapsáveis */}
+            {!isLoadingServers && hierarchyData.length > 0 && (
+              <div className="flex flex-col gap-4">
+                {hierarchyData.map((supGeral) => {
+                  const isGeralExpanded = shouldAutoExpand || expandedGerais.has(supGeral.id);
+                  const totalServidores = supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0);
+
+                  return (
+                    <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent overflow-hidden shadow-lg">
+                      {/* Header Supervisor Geral - Clicável */}
+                      <button
+                        onClick={() => toggleGeralExpanded(supGeral.id)}
+                        className="w-full px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3 hover:from-blue-500/25 transition-all cursor-pointer"
+                      >
+                        <div className="p-2.5 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                          <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest">Supervisor Geral</p>
+                          <p className="text-sm font-bold text-white">{supGeral.name}</p>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
+                          {totalServidores} servidores
+                        </span>
+                        <span className={`material-symbols-outlined text-blue-400 transition-transform duration-300 ${isGeralExpanded ? 'rotate-180' : ''}`}>
+                          expand_more
+                        </span>
+                      </button>
+
+                      {/* Supervisores de Área - Colapsável */}
+                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isGeralExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="p-3 space-y-3">
+                          {supGeral.supervisoresArea.map((supArea) => {
+                            const areaKey = `${supGeral.id}-${supArea.id}`;
+                            const isAreaExpanded = shouldAutoExpand || expandedAreas.has(areaKey);
+                            const filteredAreaServers = supArea.servidores.filter(server =>
+                              server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              server.matricula.includes(searchTerm)
+                            );
+
+                            return (
+                              <div key={supArea.id} className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden">
+                                {/* Header Supervisor de Área - Clicável */}
+                                <button
+                                  onClick={() => toggleAreaExpanded(areaKey)}
+                                  className="w-full px-3 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center gap-2 hover:bg-emerald-500/15 transition-all cursor-pointer"
+                                >
+                                  <div className="p-1.5 rounded-lg bg-emerald-500/20">
+                                    <span className="material-symbols-outlined text-emerald-400 text-lg">person</span>
+                                  </div>
+                                  <div className="flex-1 text-left">
+                                    <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-widest">Supervisor de Área</p>
+                                    <p className="text-xs font-bold text-white">{supArea.name}</p>
+                                  </div>
+                                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
+                                    {supArea.servidores.length}
+                                  </span>
+                                  <span className={`material-symbols-outlined text-emerald-400 text-lg transition-transform duration-300 ${isAreaExpanded ? 'rotate-180' : ''}`}>
+                                    expand_more
+                                  </span>
+                                </button>
+
+                                {/* Lista de Servidores - Colapsável */}
+                                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isAreaExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                  <div className="p-2 space-y-2">
+                                    {filteredAreaServers.map((server) => renderServerCard(server))}
+                                    {filteredAreaServers.length === 0 && (
+                                      <p className="text-[10px] text-slate-500 text-center py-3">Nenhum servidor encontrado</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isLoadingServers && filteredServers.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="p-4 rounded-2xl bg-[#1c2127] border border-gray-800">
+                  <span className="material-symbols-outlined text-4xl text-slate-500">group_off</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-white">Nenhum servidor encontrado</p>
+                  <p className="text-sm text-slate-500">Tente ajustar sua busca</p>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Lista Hierárquica com Cards Colapsáveis */}
-        {!isLoadingServers && hierarchyData.length > 0 && (
-          <div className="flex flex-col gap-4">
-            {hierarchyData.map((supGeral) => {
-              const isGeralExpanded = shouldAutoExpand || expandedGerais.has(supGeral.id);
-              const totalServidores = supGeral.supervisoresArea.reduce((acc, area) => acc + area.servidores.length, 0);
+        {/* Aba Análise Semanal */}
+        {activeTab === 'analise' && (
+          <>
+            {/* Filtros */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#1c2127] to-[#252b33] border border-gray-800">
+              <div className="flex flex-col gap-4">
+                {/* Linha 1: Ano e Ordenação */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Ano */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-medium">Ano:</span>
+                    <select
+                      value={analysisYear}
+                      onChange={(e) => setAnalysisYear(Number(e.target.value))}
+                      className="px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none"
+                    >
+                      {years.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
 
-              return (
-                <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent overflow-hidden shadow-lg">
-                  {/* Header Supervisor Geral - Clicável */}
-                  <button
-                    onClick={() => toggleGeralExpanded(supGeral.id)}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3 hover:from-blue-500/25 transition-all cursor-pointer"
-                  >
-                    <div className="p-2.5 rounded-xl bg-blue-500/20 border border-blue-500/30">
-                      <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
+                  {/* Ordenar por */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-medium">Ordenar por:</span>
+                    <select
+                      value={analysisSortBy}
+                      onChange={(e) => setAnalysisSortBy(e.target.value as 'total' | 'faltasSem' | 'faltasJust' | 'atestados')}
+                      className="px-3 py-2 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none"
+                    >
+                      <option value="total">Total de Ocorrências</option>
+                      <option value="faltasSem">Faltas S/ Justificativa</option>
+                      <option value="faltasJust">Faltas Justificadas</option>
+                      <option value="atestados">Atestados Médicos</option>
+                    </select>
+                  </div>
+
+                  {/* Botões de exportação */}
+                  {analysisData.length > 0 && (
+                    <div className="flex items-center gap-2 ml-auto">
+                      <button
+                        onClick={handleExportAnalysisPDF}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 transition-all text-[10px] font-bold"
+                      >
+                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                        PDF
+                      </button>
+                      <button
+                        onClick={handleExportAnalysisExcel}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-all text-[10px] font-bold"
+                      >
+                        <span className="material-symbols-outlined text-sm">table_view</span>
+                        Excel
+                      </button>
                     </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest">Supervisor Geral</p>
-                      <p className="text-sm font-bold text-white">{supGeral.name}</p>
+                  )}
+                </div>
+
+                {/* Linha 2: Semanas */}
+                <div>
+                  <span className="text-xs text-slate-400 font-medium block mb-2">Semanas Epidemiológicas:</span>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    {weeks.map(week => (
+                      <button
+                        key={week}
+                        onClick={() => handleToggleAnalysisWeek(week)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${analysisWeeks.includes(week)
+                          ? 'bg-primary text-white shadow-lg shadow-primary/30'
+                          : 'bg-gray-800 text-slate-400 hover:bg-gray-700 hover:text-white'
+                          }`}
+                      >
+                        {String(week).padStart(2, '0')}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-1">
+                    {analysisWeeks.length === 0 ? 'Selecione pelo menos uma semana' : `${analysisWeeks.length} semana(s) selecionada(s)`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Cards de Estatísticas */}
+            {analysisWeeks.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* Total */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/10 to-transparent border border-purple-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-purple-500/20">
+                      <span className="material-symbols-outlined text-purple-400 text-lg">equalizer</span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
-                      {totalServidores} servidores
-                    </span>
-                    <span className={`material-symbols-outlined text-blue-400 transition-transform duration-300 ${isGeralExpanded ? 'rotate-180' : ''}`}>
-                      expand_more
-                    </span>
-                  </button>
+                    <span className="text-[10px] text-purple-400 font-bold uppercase">Total</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{analysisStats.totalGeral}</p>
+                </div>
 
-                  {/* Supervisores de Área - Colapsável */}
-                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isGeralExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                    <div className="p-3 space-y-3">
-                      {supGeral.supervisoresArea.map((supArea) => {
-                        const areaKey = `${supGeral.id}-${supArea.id}`;
-                        const isAreaExpanded = shouldAutoExpand || expandedAreas.has(areaKey);
-                        const filteredAreaServers = supArea.servidores.filter(server =>
-                          server.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          server.matricula.includes(searchTerm)
-                        );
+                {/* Faltas S/ Justificativa */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-red-500/10 to-transparent border border-red-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-red-500/20">
+                      <span className="material-symbols-outlined text-red-400 text-lg">cancel</span>
+                    </div>
+                    <span className="text-[10px] text-red-400 font-bold uppercase">S/ Just.</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{analysisStats.totalFaltasSem}</p>
+                </div>
 
-                        return (
-                          <div key={supArea.id} className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent overflow-hidden">
-                            {/* Header Supervisor de Área - Clicável */}
-                            <button
-                              onClick={() => toggleAreaExpanded(areaKey)}
-                              className="w-full px-3 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center gap-2 hover:bg-emerald-500/15 transition-all cursor-pointer"
-                            >
-                              <div className="p-1.5 rounded-lg bg-emerald-500/20">
-                                <span className="material-symbols-outlined text-emerald-400 text-lg">person</span>
-                              </div>
-                              <div className="flex-1 text-left">
-                                <p className="text-[8px] text-emerald-400 font-bold uppercase tracking-widest">Supervisor de Área</p>
-                                <p className="text-xs font-bold text-white">{supArea.name}</p>
-                              </div>
-                              <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-[9px] font-bold">
-                                {supArea.servidores.length}
-                              </span>
-                              <span className={`material-symbols-outlined text-emerald-400 text-lg transition-transform duration-300 ${isAreaExpanded ? 'rotate-180' : ''}`}>
-                                expand_more
-                              </span>
-                            </button>
+                {/* Faltas Justificadas */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-amber-500/20">
+                      <span className="material-symbols-outlined text-amber-400 text-lg">info</span>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-bold uppercase">Justif.</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{analysisStats.totalFaltasJust}</p>
+                </div>
 
-                            {/* Lista de Servidores - Colapsável */}
-                            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isAreaExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                              <div className="p-2 space-y-2">
-                                {filteredAreaServers.map((server) => renderServerCard(server))}
-                                {filteredAreaServers.length === 0 && (
-                                  <p className="text-[10px] text-slate-500 text-center py-3">Nenhum servidor encontrado</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
+                {/* Atestados */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-500/10 to-transparent border border-teal-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-teal-500/20">
+                      <span className="material-symbols-outlined text-teal-400 text-lg">medical_information</span>
+                    </div>
+                    <span className="text-[10px] text-teal-400 font-bold uppercase">Atestados</span>
+                  </div>
+                  <p className="text-2xl font-black text-white">{analysisStats.totalAtestados}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Loading */}
+            {isLoadingAnalysis && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="size-10 border-3 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-sm text-slate-500 font-medium">Analisando dados...</p>
+              </div>
+            )}
+
+            {/* Ranking de Servidores */}
+            {!isLoadingAnalysis && analysisWeeks.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-lg text-amber-400">emoji_events</span>
+                    Ranking de Ocorrências
+                  </h3>
+                  <span className="text-[10px] text-slate-500">{analysisData.length} servidor(es) com ocorrências</span>
+                </div>
+
+                {analysisData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                      <span className="material-symbols-outlined text-3xl text-emerald-400">check_circle</span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-white">Nenhuma ocorrência</p>
+                      <p className="text-xs text-slate-500">Todos os servidores estão em dia no período selecionado</p>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                ) : (
+                  <div className="space-y-2">
+                    {analysisData.map((item, index) => {
+                      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null;
+                      const rankBg = index === 0 ? 'from-yellow-500/15 border-yellow-500/30' :
+                        index === 1 ? 'from-gray-400/15 border-gray-400/30' :
+                          index === 2 ? 'from-orange-700/15 border-orange-700/30' :
+                            'from-gray-800/50 border-gray-700';
 
-        {/* Empty State */}
-        {!isLoadingServers && filteredServers.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
-            <div className="p-4 rounded-2xl bg-[#1c2127] border border-gray-800">
-              <span className="material-symbols-outlined text-4xl text-slate-500">group_off</span>
-            </div>
-            <div className="text-center">
-              <p className="text-base font-bold text-white">Nenhum servidor encontrado</p>
-              <p className="text-sm text-slate-500">Tente ajustar sua busca</p>
-            </div>
-          </div>
+                      return (
+                        <div key={item.serverId} className={`p-3 rounded-xl bg-gradient-to-r ${rankBg} to-transparent border flex items-center gap-3`}>
+                          {/* Posição */}
+                          <div className="w-10 text-center">
+                            {medal ? (
+                              <span className="text-2xl">{medal}</span>
+                            ) : (
+                              <span className="text-lg font-black text-slate-500">{index + 1}º</span>
+                            )}
+                          </div>
+
+                          {/* Avatar e Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-white truncate">{item.serverName}</p>
+                            <p className="text-[10px] text-slate-500">Mat: {item.matricula} • {item.supervisorAreaName}</p>
+                          </div>
+
+                          {/* Contadores */}
+                          <div className="flex items-center gap-2">
+                            {item.faltasSemJustificativa > 0 && (
+                              <span className="px-2 py-1 rounded-lg bg-red-500/20 text-red-400 text-[9px] font-bold" title="Faltas S/ Justificativa">
+                                FS: {item.faltasSemJustificativa}
+                              </span>
+                            )}
+                            {item.faltasJustificadas > 0 && (
+                              <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-400 text-[9px] font-bold" title="Faltas Justificadas">
+                                FJ: {item.faltasJustificadas}
+                              </span>
+                            )}
+                            {item.atestadosMedicos > 0 && (
+                              <span className="px-2 py-1 rounded-lg bg-teal-500/20 text-teal-400 text-[9px] font-bold" title="Atestados Médicos">
+                                AM: {item.atestadosMedicos}
+                              </span>
+                            )}
+                            <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-400 text-[10px] font-black border border-purple-500/30" title="Total">
+                              {item.totalOcorrencias}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Estado vazio quando não há semanas selecionadas */}
+            {!isLoadingAnalysis && analysisWeeks.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4">
+                <div className="p-4 rounded-2xl bg-[#1c2127] border border-gray-800">
+                  <span className="material-symbols-outlined text-4xl text-slate-500">calendar_month</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-white">Selecione semanas para análise</p>
+                  <p className="text-sm text-slate-500">Clique nas semanas acima para visualizar o ranking</p>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </main>
 
