@@ -128,7 +128,10 @@ const Login: React.FC = () => {
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); setError(null); }}
                 required
-                autoComplete="email"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore
+                data-form-type="other"
               />
             </div>
 
@@ -139,14 +142,16 @@ const Login: React.FC = () => {
               </label>
               <div className="relative">
                 <input
-                  className="h-[52px] w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-4 pr-14 text-[15px] text-white placeholder:text-text-tertiary/50 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200 tracking-widest"
+                  className="h-[52px] w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-4 pr-14 text-[15px] text-white placeholder:text-text-tertiary/50 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200"
                   placeholder="Digite sua senha"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(null); }}
                   required
-                  autoComplete="current-password"
-                  style={!showPassword && password ? { letterSpacing: '0.25em' } : { letterSpacing: 'normal' }}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore
+                  data-form-type="other"
                 />
                 <button
                   className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-lg text-text-tertiary hover:text-white hover:bg-white/[0.06] active:bg-white/[0.1] focus:text-white transition-all duration-200"
