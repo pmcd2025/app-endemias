@@ -73,12 +73,12 @@ const AppRoutes = () => {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/servers" element={<Servers />} />
         <Route path="/ponto" element={<Ponto />} />
         <Route path="/reports" element={<Reports />} />
 
-        {/* Rota protegida para gestor e admin - Monitoramento */}
+        {/* Rota protegida para gestor e admin - Servidores e Monitoramento */}
         <Route element={<GestorOrAdminRoute />}>
+          <Route path="/servers" element={<Servers />} />
           <Route path="/monitoring" element={<SubmissionMonitoring />} />
         </Route>
 

@@ -13,7 +13,7 @@ const Layout: React.FC = () => {
   const allNavItems = [
     { label: 'Início', icon: 'dashboard', path: '/' },
     { label: 'Ponto', icon: 'schedule', path: '/ponto' },
-    { label: 'Servidores', icon: 'dns', path: '/servers' },
+    { label: 'Servidores', icon: 'dns', path: '/servers', gestorOrAdmin: true },
     { label: 'Relatórios', icon: 'analytics', path: '/reports' },
     { label: 'Monitoramento', icon: 'monitoring', path: '/monitoring', gestorOrAdmin: true },
     { label: 'Usuários', icon: 'group', path: '/users', adminOnly: true }
