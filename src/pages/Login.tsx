@@ -117,46 +117,39 @@ const Login: React.FC = () => {
           {/* Form */}
           <form className="flex flex-col gap-4" onSubmit={handleLogin}>
             {/* Email Field */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary pl-1">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary pl-0.5">
                 E-mail
               </label>
-              <div className="group relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-primary transition-colors duration-200">
-                  <span className="material-symbols-outlined text-[20px]">mail</span>
-                </span>
-                <input
-                  className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-11 pr-4 text-[15px] text-white placeholder:text-text-tertiary/70 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200"
-                  placeholder="seu@email.com"
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setError(null); }}
-                  required
-                  autoComplete="email"
-                />
-              </div>
+              <input
+                className="h-[52px] w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 text-[15px] text-white placeholder:text-text-tertiary/50 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200"
+                placeholder="Digite seu e-mail"
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(null); }}
+                required
+                autoComplete="email"
+              />
             </div>
 
             {/* Password Field */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary pl-1">
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-text-secondary pl-0.5">
                 Senha
               </label>
-              <div className="group relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-primary transition-colors duration-200">
-                  <span className="material-symbols-outlined text-[20px]">lock</span>
-                </span>
+              <div className="relative">
                 <input
-                  className="h-12 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-11 pr-12 text-[15px] text-white placeholder:text-text-tertiary/70 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200"
-                  placeholder="••••••••"
+                  className="h-[52px] w-full rounded-xl border border-white/[0.08] bg-white/[0.04] pl-4 pr-14 text-[15px] text-white placeholder:text-text-tertiary/50 focus:border-primary/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all duration-200 tracking-widest"
+                  placeholder="Digite sua senha"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(null); }}
                   required
                   autoComplete="current-password"
+                  style={!showPassword && password ? { letterSpacing: '0.25em' } : { letterSpacing: 'normal' }}
                 />
                 <button
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-white focus:text-white transition-colors duration-200"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-lg text-text-tertiary hover:text-white hover:bg-white/[0.06] active:bg-white/[0.1] focus:text-white transition-all duration-200"
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   tabIndex={-1}
