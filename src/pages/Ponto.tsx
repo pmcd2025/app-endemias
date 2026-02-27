@@ -31,10 +31,18 @@ interface SupervisorGeralWithArea {
   }[];
 }
 
-const statusOptions = [
-  'Normal', 'Férias', 'Falta Justificada', 'Falta Sem Justificativa',
-  'Feriado', 'Facultativo', 'Folga de Aniversário', 'Atestado Médico'
+// Opções de status para dias trabalhados (completo ou meio período)
+const workStatusOptions = [
+  'Normal', 'Férias', 'Feriado', 'Facultativo', 'Folga de Aniversário'
 ];
+
+// Opções de status para ausência
+const absenceOptions = [
+  'Falta Justificada', 'Falta Sem Justificativa', 'Atestado Médico'
+];
+
+// Todos os status (para compatibilidade retroativa)
+const statusOptions = [...workStatusOptions, ...absenceOptions];
 
 const initialDayState: DiaRegistro = { worked_days: 1, producao: '', status: 'Normal' };
 
@@ -49,7 +57,11 @@ interface DayRowProps {
 }
 
 const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, onDayChange, disabled = false }) => {
-  const isProductionDisabled = disabled || data.status !== 'Normal';
+  const workedDaysNum = Number(data.worked_days);
+  const isAbsent = workedDaysNum === 0;
+  const isHalfDay = workedDaysNum === 0.5;
+  const isFullDay = workedDaysNum === 1;
+  const isProductionDisabled = disabled || isAbsent || !workStatusOptions.includes(data.status) || data.status !== 'Normal';
 
   const handleProductionStep = (step: number) => {
     if (isProductionDisabled) return;
@@ -58,65 +70,179 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
     onDayChange(dayNum, 'producao', next.toString());
   };
 
+  const handlePeriodSelect = (period: 'full' | 'half' | 'absent') => {
+    if (disabled) return;
+    if (period === 'full') {
+      onDayChange(dayNum, 'worked_days', 1);
+      // Dia completo não deve ter status de ausência
+      if (absenceOptions.includes(data.status)) {
+        onDayChange(dayNum, 'status', 'Normal');
+      }
+    } else if (period === 'half') {
+      // Meio período: apenas muda worked_days, mantém o status atual
+      // (o usuário escolhe o status: Normal, Atestado Médico, Falta etc.)
+      onDayChange(dayNum, 'worked_days', 0.5);
+      // Se vinha de "Ausente" (0) sem status definido, mantém o status de ausência pois faz sentido
+    } else {
+      onDayChange(dayNum, 'worked_days', 0);
+      if (!absenceOptions.includes(data.status)) {
+        onDayChange(dayNum, 'status', 'Falta Justificada');
+      }
+    }
+  };
+
+  // Ícones e cores para cada tipo de ausência
+  const absenceIcons: Record<string, { icon: string; color: string }> = {
+    'Falta Justificada': { icon: 'event_busy', color: 'text-amber-400' },
+    'Falta Sem Justificativa': { icon: 'cancel', color: 'text-red-400' },
+    'Atestado Médico': { icon: 'medical_services', color: 'text-blue-400' },
+  };
+  const absenceInfo = absenceIcons[data.status];
+
   return (
-    <div className={`flex flex-col gap-2 p-3 rounded-xl border border-gray-800 bg-background-dark/50 ${(!isActive || disabled) ? 'opacity-60' : ''} ${!isActive ? 'pointer-events-none' : ''}`}>
+    <div className={`flex flex-col gap-2 p-3 rounded-xl border transition-all ${isAbsent
+      ? 'border-red-500/30 bg-red-500/5'
+      : isHalfDay
+        ? 'border-amber-500/30 bg-amber-500/5'
+        : 'border-gray-800 bg-background-dark/50'
+      } ${(!isActive || disabled) ? 'opacity-60' : ''} ${!isActive ? 'pointer-events-none' : ''}`}>
+
+      {/* Cabeçalho com label */}
       <div className="flex justify-between items-center">
-        <span className="text-xs font-bold text-primary uppercase">{label}</span>
+        <span className={`text-xs font-bold uppercase ${isAbsent ? 'text-red-400' : isHalfDay ? 'text-amber-400' : 'text-primary'
+          }`}>{label}</span>
+        {isAbsent && absenceInfo && (
+          <span className={`flex items-center gap-1 text-[10px] font-bold ${absenceInfo.color}`}>
+            <span className="material-symbols-outlined text-sm">{absenceInfo.icon}</span>
+            {data.status}
+          </span>
+        )}
+        {isHalfDay && (
+          <span className="flex items-center gap-1 text-[10px] font-bold text-amber-400">
+            <span className="material-symbols-outlined text-sm">schedule</span>
+            Meio Período
+          </span>
+        )}
       </div>
-      <div className="grid grid-cols-[auto_1fr_1fr] gap-3">
-        <div className="flex flex-col gap-1 items-center justify-center min-w-[60px]">
-          <label className="text-[10px] text-slate-500 font-bold uppercase">Trabalhou?</label>
-          <input
-            type="checkbox"
-            disabled={disabled || data.status !== 'Normal'}
-            checked={Number(data.worked_days) > 0}
-            onChange={(e) => onDayChange(dayNum, 'worked_days', e.target.checked ? 1 : 0)}
-            className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary focus:ring-primary transition-all ${(disabled || data.status !== 'Normal') ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-              }`}
-          />
-        </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-slate-500 font-bold uppercase text-center">Produção</label>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={isProductionDisabled}
-              onClick={() => handleProductionStep(-1)}
-              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
-            >
-              <span className="material-symbols-outlined text-sm">remove</span>
-            </button>
-            <input
-              type="number"
-              disabled={isProductionDisabled}
-              placeholder="0"
-              value={data.producao}
-              onChange={(e) => onDayChange(dayNum, 'producao', e.target.value)}
-              className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white focus:ring-primary text-center appearance-none ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            />
-            <button
-              type="button"
-              disabled={isProductionDisabled}
-              onClick={() => handleProductionStep(1)}
-              className={`size-8 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
-            >
-              <span className="material-symbols-outlined text-sm">add</span>
-            </button>
+      {/* Seletor de Período — 3 botões */}
+      <div className="grid grid-cols-3 gap-1.5">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => handlePeriodSelect('full')}
+          className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[10px] font-bold transition-all border ${isFullDay
+            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-sm shadow-emerald-500/10'
+            : 'bg-gray-800/60 border-gray-700 text-slate-400 hover:border-emerald-500/30 hover:text-emerald-400'
+            } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span className="material-symbols-outlined text-base">check_circle</span>
+          <span>Dia Completo</span>
+        </button>
+
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => handlePeriodSelect('half')}
+          className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[10px] font-bold transition-all border ${isHalfDay
+            ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 shadow-sm shadow-amber-500/10'
+            : 'bg-gray-800/60 border-gray-700 text-slate-400 hover:border-amber-500/30 hover:text-amber-400'
+            } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span className="material-symbols-outlined text-base">schedule</span>
+          <span>Meio Período</span>
+        </button>
+
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => handlePeriodSelect('absent')}
+          className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[10px] font-bold transition-all border ${isAbsent
+            ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-sm shadow-red-500/10'
+            : 'bg-gray-800/60 border-gray-700 text-slate-400 hover:border-red-500/30 hover:text-red-400'
+            } ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <span className="material-symbols-outlined text-base">cancel</span>
+          <span>Ausente</span>
+        </button>
+      </div>
+
+      {/* Campos de Produção e Status — aparecem abaixo dos botões */}
+      <div className="grid grid-cols-[1fr_1fr] gap-2">
+
+        {/* Produção — visível apenas quando não ausente */}
+        {!isAbsent ? (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase text-center">Produção</label>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={isProductionDisabled}
+                onClick={() => handleProductionStep(-1)}
+                className={`size-7 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
+              >
+                <span className="material-symbols-outlined text-sm">remove</span>
+              </button>
+              <input
+                type="number"
+                disabled={isProductionDisabled}
+                placeholder="0"
+                value={data.producao}
+                onChange={(e) => onDayChange(dayNum, 'producao', e.target.value)}
+                className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-1.5 text-white focus:ring-primary text-center appearance-none ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <button
+                type="button"
+                disabled={isProductionDisabled}
+                onClick={() => handleProductionStep(1)}
+                className={`size-7 flex items-center justify-center rounded-lg bg-gray-700 text-white transition-all ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-600 active:scale-95'}`}
+              >
+                <span className="material-symbols-outlined text-sm">add</span>
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase">Tipo de Ausência</label>
+            <select
+              value={data.status}
+              disabled={disabled}
+              onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
+              className="w-full h-[34px] bg-[#1c2127] border-red-500/30 rounded-lg text-[10px] px-2 text-white focus:ring-red-400 appearance-none disabled:opacity-50"
+            >
+              {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+        )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
-          <select
-            value={data.status}
-            disabled={disabled}
-            onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
-            className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none disabled:opacity-50"
-          >
-            {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-          </select>
-        </div>
+        {/* Status — para dias completos: só opções de trabalho
+              Para meio período: opções de trabalho + ausência (ex: trabalhou manhã + atestado tarde) */}
+        {!isAbsent && (
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
+            <select
+              value={data.status}
+              disabled={disabled}
+              onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
+              className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none disabled:opacity-50"
+            >
+              {isHalfDay ? (
+                // Meio período: todas as opções disponíveis
+                <>
+                  <optgroup label="Trabalhado">
+                    {workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </optgroup>
+                  <optgroup label="Ausência (meio período)">
+                    {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </optgroup>
+                </>
+              ) : (
+                // Dia completo: apenas opções de trabalho
+                workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
+              )}
+            </select>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -514,11 +640,30 @@ const Ponto: React.FC = () => {
       const currentDay = prev[day];
       let newData = { ...currentDay, [field]: value };
 
+      if (field === 'worked_days') {
+        const numVal = Number(value);
+        // Se mudar para ausente (0) e status atual não é de ausência, define padrão
+        if (numVal === 0 && !absenceOptions.includes(currentDay.status)) {
+          newData.status = 'Falta Justificada';
+        }
+        // Se mudar de ausente para trabalhado, força status de trabalho
+        if (numVal > 0 && absenceOptions.includes(currentDay.status)) {
+          newData.status = 'Normal';
+        }
+      }
+
       if (field === 'status') {
-        if (value === 'Normal') {
+        const isAbsenceStatus = absenceOptions.includes(value);
+        if (isAbsenceStatus) {
+          // Status de ausência:
+          // - Se é meio período (0.5) → mantém 0.5 (ex: trabalhou manhã + atestado tarde)
+          // - Caso contrário → ausente (0)
+          if (Number(currentDay.worked_days) !== 0.5) {
+            newData.worked_days = 0;
+          }
+        } else if (Number(currentDay.worked_days) === 0) {
+          // Era ausente total mas mudou para status de trabalho → dia completo
           newData.worked_days = 1;
-        } else {
-          newData.worked_days = 0;
         }
       }
 

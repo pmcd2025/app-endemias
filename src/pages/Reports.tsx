@@ -62,10 +62,10 @@ const statusColors: Record<string, { bg: string; text: string; abbrev: string }>
   'Atestado Médico': { bg: 'bg-teal-500/20', text: 'text-teal-400', abbrev: 'AM' },
 };
 
-const statusOptions = [
-  'Normal', 'Férias', 'Falta Justificada', 'Falta Sem Justificativa',
-  'Feriado', 'Facultativo', 'Folga de Aniversário', 'Atestado Médico'
-];
+// Opções separadas (espelham o Ponto.tsx)
+const workStatusOptions = ['Normal', 'Férias', 'Feriado', 'Facultativo', 'Folga de Aniversário'];
+const absenceOptions = ['Falta Justificada', 'Falta Sem Justificativa', 'Atestado Médico'];
+const statusOptions = [...workStatusOptions, ...absenceOptions];
 
 const dayNames = ['', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -292,14 +292,15 @@ const Reports: React.FC = () => {
       // Calcular estatísticas resumidas
       let totalDays = 0;
       let totalProduction = 0;
-      let totalFaltas = 0;
+      let totalFaltas = 0; // Faltas (justificadas + sem justificativa + atestado)
       let totalFerias = 0;
 
       records.forEach(record => {
         record.daily_entries.forEach(entry => {
           totalDays += entry.worked_days || 0;
           totalProduction += entry.production || 0;
-          if (entry.status === 'Falta Justificada' || entry.status === 'Falta Sem Justificativa') {
+          // Conta qualquer tipo de ausência (inclusive atestado e meio período com ausência)
+          if (absenceOptions.includes(entry.status || '')) {
             totalFaltas++;
           }
           if (entry.status === 'Férias') {
@@ -1871,57 +1872,111 @@ const Reports: React.FC = () => {
 
               {[1, 2, 3, 4, 5, 6].map(day => {
                 if (day === 6 && !editingRecord.saturday_active) return null;
-                const data = editWeekData[day] || { worked_days: 0, production: 0, status: 'Normal' };
-                const isFieldDisabled = data.status !== 'Normal';
+                const data = editWeekData[day] || { worked_days: 1, production: 0, status: 'Normal' };
+                const workedNum = Number(data.worked_days);
+                const isAbsent = workedNum === 0;
+                const isHalfDay = workedNum === 0.5;
+                const isFullDay = workedNum === 1;
+                const isProductionDisabled = isAbsent || data.status !== 'Normal';
+
+                const handleEditPeriod = (period: 'full' | 'half' | 'absent') => {
+                  setEditWeekData(prev => {
+                    const cur = prev[day] || { day_of_week: day, worked_days: 1, production: 0, status: 'Normal' };
+                    if (period === 'full') {
+                      return { ...prev, [day]: { ...cur, worked_days: 1, status: absenceOptions.includes(cur.status || '') ? 'Normal' : cur.status } };
+                    } else if (period === 'half') {
+                      return { ...prev, [day]: { ...cur, worked_days: 0.5 } };
+                    } else {
+                      return { ...prev, [day]: { ...cur, worked_days: 0, status: absenceOptions.includes(cur.status || '') ? cur.status : 'Falta Justificada' } };
+                    }
+                  });
+                };
+
                 return (
-                  <div key={day} className="p-3 rounded-xl bg-[#101922] border border-gray-700 space-y-2">
-                    <p className="text-xs font-bold text-primary">{dayNames[day]}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[8px] text-slate-500 uppercase">Trabalhou</label>
-                        <input
-                          type="checkbox"
-                          disabled={isFieldDisabled}
-                          checked={Number(data.worked_days) > 0}
-                          onChange={(e) => setEditWeekData(prev => ({
-                            ...prev,
-                            [day]: { ...prev[day], worked_days: e.target.checked ? 1 : 0 }
-                          }))}
-                          className={`size-5 rounded border-gray-700 bg-[#1c2127] text-primary ${isFieldDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[8px] text-slate-500 uppercase">Produção</label>
-                        <input
-                          type="number"
-                          disabled={isFieldDisabled}
-                          value={data.production || 0}
-                          onChange={(e) => setEditWeekData(prev => ({
-                            ...prev,
-                            [day]: { ...prev[day], production: parseInt(e.target.value) || 0 }
-                          }))}
-                          className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white ${isFieldDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[8px] text-slate-500 uppercase">Status</label>
+                  <div key={day} className={`p-3 rounded-xl border space-y-2 transition-all ${isAbsent ? 'bg-red-500/5 border-red-500/30' : isHalfDay ? 'bg-amber-500/5 border-amber-500/30' : 'bg-[#101922] border-gray-700'
+                    }`}>
+                    <div className="flex items-center justify-between">
+                      <p className={`text-xs font-bold ${isAbsent ? 'text-red-400' : isHalfDay ? 'text-amber-400' : 'text-primary'}`}>{dayNames[day]}</p>
+                      {isHalfDay && <span className="text-[9px] text-amber-400 font-bold">½ Período</span>}
+                    </div>
+
+                    {/* Seletor de período */}
+                    <div className="grid grid-cols-3 gap-1">
+                      <button type="button" onClick={() => handleEditPeriod('full')}
+                        className={`py-1.5 rounded-lg text-[9px] font-bold border transition-all ${isFullDay ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' : 'bg-gray-800 border-gray-700 text-slate-400 hover:text-emerald-400'
+                          }`}>
+                        ✅ Completo
+                      </button>
+                      <button type="button" onClick={() => handleEditPeriod('half')}
+                        className={`py-1.5 rounded-lg text-[9px] font-bold border transition-all ${isHalfDay ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'bg-gray-800 border-gray-700 text-slate-400 hover:text-amber-400'
+                          }`}>
+                        🌗 Metade
+                      </button>
+                      <button type="button" onClick={() => handleEditPeriod('absent')}
+                        className={`py-1.5 rounded-lg text-[9px] font-bold border transition-all ${isAbsent ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-gray-800 border-gray-700 text-slate-400 hover:text-red-400'
+                          }`}>
+                        ❌ Ausente
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Produção - visível quando não ausente */}
+                      {!isAbsent && (
+                        <div>
+                          <label className="text-[8px] text-slate-500 uppercase">Produção</label>
+                          <input
+                            type="number"
+                            disabled={isProductionDisabled}
+                            value={data.production || 0}
+                            onChange={(e) => setEditWeekData(prev => ({
+                              ...prev,
+                              [day]: { ...prev[day], production: parseInt(e.target.value) || 0 }
+                            }))}
+                            className={`w-full bg-[#1c2127] border-gray-700 rounded-lg text-xs p-2 text-white ${isProductionDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          />
+                        </div>
+                      )}
+
+                      {/* Status */}
+                      <div className={!isAbsent ? '' : 'col-span-2'}>
+                        <label className="text-[8px] text-slate-500 uppercase">
+                          {isAbsent ? 'Tipo de Ausência' : 'Status'}
+                        </label>
                         <select
                           value={data.status || 'Normal'}
                           onChange={(e) => {
                             const newStatus = e.target.value;
+                            const isAbsenceStatus = absenceOptions.includes(newStatus);
                             setEditWeekData(prev => ({
                               ...prev,
                               [day]: {
                                 ...prev[day],
                                 status: newStatus,
-                                // Quando status muda para diferente de Normal, zerar worked_days
-                                worked_days: newStatus === 'Normal' ? prev[day]?.worked_days || 1 : 0
+                                // Ausência total: worked_days=0 (exceto se já era meio período)
+                                // Ausência em meio período: manter 0.5
+                                worked_days: isAbsenceStatus
+                                  ? (Number(prev[day]?.worked_days) === 0.5 ? 0.5 : 0)
+                                  : (Number(prev[day]?.worked_days) === 0 ? 1 : prev[day]?.worked_days || 1)
                               }
                             }));
                           }}
-                          className="w-full bg-[#1c2127] border-gray-700 rounded-lg text-[10px] p-2 text-white"
+                          className={`w-full bg-[#1c2127] rounded-lg text-[10px] p-2 text-white border ${isAbsent ? 'border-red-500/30' : 'border-gray-700'
+                            }`}
                         >
-                          {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          {isAbsent ? (
+                            absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                          ) : isHalfDay ? (
+                            <>
+                              <optgroup label="Trabalhado">
+                                {workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                              </optgroup>
+                              <optgroup label="Ausência (½ período)">
+                                {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                              </optgroup>
+                            </>
+                          ) : (
+                            workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
+                          )}
                         </select>
                       </div>
                     </div>
