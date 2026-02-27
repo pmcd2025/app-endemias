@@ -61,7 +61,9 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
   const isAbsent = workedDaysNum === 0;
   const isHalfDay = workedDaysNum === 0.5;
   const isFullDay = workedDaysNum === 1;
-  const isProductionDisabled = disabled || isAbsent || !workStatusOptions.includes(data.status) || data.status !== 'Normal';
+  // Produção habilitada quando: status = 'Normal' (dia completo) OU status = '' (meio período sem motivo selecionado ainda)
+  // Bloqueia quando há um motivo de ausência selecionado ou é um status não-Normal como Férias, Feriado etc.
+  const isProductionDisabled = disabled || isAbsent || (data.status !== 'Normal' && data.status !== '');
 
   const handleProductionStep = (step: number) => {
     if (isProductionDisabled) return;
@@ -79,15 +81,13 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
         onDayChange(dayNum, 'status', 'Normal');
       }
     } else if (period === 'half') {
-      // Meio período: apenas muda worked_days, mantém o status atual
-      // (o usuário escolhe o status: Normal, Atestado Médico, Falta etc.)
       onDayChange(dayNum, 'worked_days', 0.5);
-      // Se vinha de "Ausente" (0) sem status definido, mantém o status de ausência pois faz sentido
+      // Limpa a seleção para o usuário escolher o motivo
+      onDayChange(dayNum, 'status', '');
     } else {
       onDayChange(dayNum, 'worked_days', 0);
-      if (!absenceOptions.includes(data.status)) {
-        onDayChange(dayNum, 'status', 'Falta Justificada');
-      }
+      // Limpa a seleção para o usuário escolher o motivo
+      onDayChange(dayNum, 'status', '');
     }
   };
 
@@ -210,13 +210,14 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
               onChange={(e) => onDayChange(dayNum, 'status', e.target.value)}
               className="w-full h-[34px] bg-[#1c2127] border-red-500/30 rounded-lg text-[10px] px-2 text-white focus:ring-red-400 appearance-none disabled:opacity-50"
             >
+              <option value="" disabled>Selecione o motivo...</option>
               {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
         )}
 
         {/* Status — para dias completos: só opções de trabalho
-              Para meio período: opções de trabalho + ausência (ex: trabalhou manhã + atestado tarde) */}
+              Para meio período: apenas as opções de ausência (motivo da ausência do meio período) */}
         {!isAbsent && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] text-slate-500 font-bold uppercase">Status</label>
@@ -227,17 +228,13 @@ const DayRow: React.FC<DayRowProps> = ({ dayNum, label, isActive = true, data, o
               className="w-full h-[34px] bg-[#1c2127] border-gray-700 rounded-lg text-[10px] px-2 text-white focus:ring-primary appearance-none disabled:opacity-50"
             >
               {isHalfDay ? (
-                // Meio período: todas as opções disponíveis
+                // Meio período: apenas motivos de ausência (com placeholder)
                 <>
-                  <optgroup label="Trabalhado">
-                    {workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </optgroup>
-                  <optgroup label="Ausência (meio período)">
-                    {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </optgroup>
+                  <option value="" disabled>Selecione o motivo...</option>
+                  {absenceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </>
               ) : (
-                // Dia completo: apenas opções de trabalho
+                // Dia completo: apenas opções de trabalho (Normal já vem selecionado por padrão)
                 workStatusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)
               )}
             </select>
@@ -654,9 +651,12 @@ const Ponto: React.FC = () => {
 
       if (field === 'status') {
         const isAbsenceStatus = absenceOptions.includes(value);
-        if (isAbsenceStatus) {
+        const isEmpty = value === '';
+        if (isEmpty) {
+          // Placeholder selecionado — não alterar worked_days
+        } else if (isAbsenceStatus) {
           // Status de ausência:
-          // - Se é meio período (0.5) → mantém 0.5 (ex: trabalhou manhã + atestado tarde)
+          // - Se é meio período (0.5) → mantém 0.5
           // - Caso contrário → ausente (0)
           if (Number(currentDay.worked_days) !== 0.5) {
             newData.worked_days = 0;
