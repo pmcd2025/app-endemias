@@ -131,22 +131,72 @@ const Dashboard: React.FC = () => {
           sum + (entry.production || 0), 0) || 0;
       }
 
-      // Contar férias do MÊS ATUAL usando tabela vacations
+      // Contar férias:
       let vacationsCount = 0;
-      const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
-      const monthStartStr = monthStart.toISOString().split('T')[0];
-      const monthEndStr = monthEnd.toISOString().split('T')[0];
+      // Definir período de busca baseado se tem semana selecionada ou se é o mês inteiro
+      let periodStartStr: string;
+      let periodEndStr: string;
 
+      if (selectedWeek > 0) {
+        const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
+        periodStartStr = weekRange.start.toISOString().split('T')[0];
+        periodEndStr = weekRange.end.toISOString().split('T')[0];
+      } else {
+        const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+        periodStartStr = monthStart.toISOString().split('T')[0];
+        periodEndStr = monthEnd.toISOString().split('T')[0];
+      }
+
+      // FONTE 1 - tabela vacations (períodos de férias agendados)
       let vacationsQuery = supabase.from('vacations')
-        .select('*', { count: 'exact', head: true })
-        .lte('period_start', monthEndStr)
-        .gte('period_end', monthStartStr);
+        .select('server_id', { count: 'exact' })
+        .lte('period_start', periodEndStr)
+        .gte('period_end', periodStartStr);
 
       if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
         vacationsQuery = vacationsQuery.in('server_id', serverIds);
       }
-      const { count: vacCount } = await (vacationsQuery as any);
-      vacationsCount = vacCount || 0;
+      const { data: vacTableData, count: vacCount } = await (vacationsQuery as any);
+      const vacTableServerIds = new Set((vacTableData || []).map((v: any) => v.server_id));
+
+      // FONTE 2 - servidores com status = 'vacation' na tabela servers
+      let vacStatusQuery = supabase.from('servers')
+        .select('id', { count: 'exact' })
+        .eq('status', 'vacation');
+
+      if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
+        vacStatusQuery = vacStatusQuery.in('id', serverIds);
+      }
+      const { data: vacStatusData, count: vacStatusCount } = await (vacStatusQuery as any);
+      const vacStatusServerIds = new Set((vacStatusData || []).map((s: any) => s.id));
+
+      // FONTE 3 - daily_entries com status "Férias"
+      let vacDailyServerIds = new Set<string>();
+      if (weeklyRecordIds.length > 0) {
+        let dailyVacQuery = supabase.from('daily_entries')
+          .select('weekly_record_id')
+          .eq('status', 'Férias')
+          .in('weekly_record_id', weeklyRecordIds);
+          
+        const { data: dailyVacData } = await (dailyVacQuery as any);
+        
+        if (dailyVacData && dailyVacData.length > 0) {
+          // Precisamos dos server_ids de cada weekly_record
+          const { data: recordsData } = await supabase.from('weekly_records')
+            .select('id, server_id')
+            .in('id', dailyVacData.map((d: any) => d.weekly_record_id));
+            
+          recordsData?.forEach((record: any) => {
+            if (serverIds.length === 0 || serverIds.includes(record.server_id)) {
+              vacDailyServerIds.add(record.server_id);
+            }
+          });
+        }
+      }
+
+      // Unir as três fontes (sem duplicar servidores)
+      const allVacationServerIds = new Set([...vacTableServerIds, ...vacStatusServerIds, ...vacDailyServerIds]);
+      vacationsCount = allVacationServerIds.size;
 
       // Contar faltas DA SEMANA SELECIONADA
       let faltasCount = 0;
@@ -220,13 +270,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Buscar detalhes de férias do mês atual
+  // Buscar detalhes de férias do mês atual (ambas as fontes)
   const fetchVacationDetails = async () => {
     if (!userProfile) return;
 
     setLoadingDetails(true);
     try {
-      let serverIdsQuery = supabase.from('servers').select('id, name, matricula');
+      let serverIdsQuery = supabase.from('servers').select('id, name, matricula, status');
       if (userProfile.role === 'supervisor_area') {
         serverIdsQuery = serverIdsQuery.eq('supervisor_area_id', userProfile.id);
       } else if (userProfile.role === 'supervisor_geral') {
@@ -236,22 +286,37 @@ const Dashboard: React.FC = () => {
       const { data: serversData } = await (serverIdsQuery as any);
       const serverIds = serversData?.map((s: any) => s.id) || [];
 
-      if (serverIds.length === 0) {
+      if (serverIds.length === 0 && userProfile.role !== 'super_admin') {
         setVacationServers([]);
         return;
       }
 
-      // Buscar férias do MÊS ATUAL da tabela vacations
-      const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
-      const monthStartStr = monthStart.toISOString().split('T')[0];
-      const monthEndStr = monthEnd.toISOString().split('T')[0];
-      const currentMonthName = monthNames[monthStart.getMonth()];
+      const vacationData: ServerWithStatus[] = [];
+      const addedServerIds = new Set<string>();
 
+      // Definir período de busca baseado se tem semana selecionada ou se é o mês inteiro
+      let periodStartStr: string;
+      let periodEndStr: string;
+      let displayPeriodName: string;
+
+      if (selectedWeek > 0) {
+        const weekRange = getEpidemiologicalWeekRange(selectedYear, selectedWeek);
+        periodStartStr = weekRange.start.toISOString().split('T')[0];
+        periodEndStr = weekRange.end.toISOString().split('T')[0];
+        displayPeriodName = `Semana ${selectedWeek}`;
+      } else {
+        const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+        periodStartStr = monthStart.toISOString().split('T')[0];
+        periodEndStr = monthEnd.toISOString().split('T')[0];
+        displayPeriodName = monthNames[new Date().getMonth()];
+      }
+
+      // FONTE 1: Buscar férias da tabela vacations
       let vacationsQuery = supabase
         .from('vacations')
         .select('*')
-        .lte('period_start', monthEndStr)
-        .gte('period_end', monthStartStr)
+        .lte('period_start', periodEndStr)
+        .gte('period_end', periodStartStr)
         .order('period_start', { ascending: true });
 
       if (userProfile.role !== 'super_admin') {
@@ -260,13 +325,12 @@ const Dashboard: React.FC = () => {
 
       const { data: vacationsData } = await (vacationsQuery as any);
 
-      // Mapear para o formato esperado
-      const vacationData: ServerWithStatus[] = (vacationsData || []).map((vacation: any) => {
-        const server = serversData.find((s: any) => s.id === vacation.server_id);
-        const startDate = new Date(vacation.period_start);
-        const endDate = new Date(vacation.period_end);
+      // Mapear dados da tabela vacations
+      (vacationsData || []).forEach((vacation: any) => {
+        const server = serversData?.find((s: any) => s.id === vacation.server_id);
+        addedServerIds.add(vacation.server_id);
 
-        return {
+        vacationData.push({
           id: vacation.id,
           name: server?.name || 'Desconhecido',
           matricula: server?.matricula || '',
@@ -274,10 +338,83 @@ const Dashboard: React.FC = () => {
           start_date: vacation.period_start,
           end_date: vacation.period_end,
           days_count: vacation.days_count,
-          month: currentMonthName,
-          year: startDate.getFullYear()
-        };
+          month: displayPeriodName,
+          year: new Date(vacation.period_start).getFullYear()
+        });
       });
+
+      // FONTE 2: Servidores com status = 'vacation' na tabela servers
+      let vacStatusQuery = supabase
+        .from('servers')
+        .select('id, name, matricula')
+        .eq('status', 'vacation');
+
+      if (userProfile.role !== 'super_admin' && serverIds.length > 0) {
+        vacStatusQuery = vacStatusQuery.in('id', serverIds);
+      }
+
+      const { data: vacStatusServers } = await (vacStatusQuery as any);
+
+      (vacStatusServers || []).forEach((server: any) => {
+        if (!addedServerIds.has(server.id)) {
+          addedServerIds.add(server.id);
+          vacationData.push({
+            id: `status-${server.id}`,
+            name: server.name,
+            matricula: server.matricula || '',
+            status: 'Férias',
+            month: displayPeriodName,
+            year: selectedYear
+          });
+        }
+      });
+
+      // FONTE 3: Servidores com lançamentos de férias diários (daily_entries) no período selecionado
+      let weeklyQuery = supabase
+        .from('weekly_records')
+        .select('id, server_id, week_number')
+        .eq('year', selectedYear);
+        
+      if (selectedWeek > 0) {
+        weeklyQuery = weeklyQuery.eq('week_number', selectedWeek);
+      }
+
+      if (serverIds.length > 0 && userProfile.role !== 'super_admin') {
+        weeklyQuery = weeklyQuery.in('server_id', serverIds);
+      }
+
+      const { data: targetRecordsRaw } = await weeklyQuery;
+      const targetRecords = targetRecordsRaw as any[];
+
+      if (targetRecords && targetRecords.length > 0) {
+        const recordIds = targetRecords.map(r => r.id);
+        const dailyVacQuery = supabase.from('daily_entries')
+          .select('weekly_record_id, status')
+          .eq('status', 'Férias')
+          .in('weekly_record_id', recordIds);
+          
+        const { data: dailyVacData } = await (dailyVacQuery as any);
+
+        if (dailyVacData && dailyVacData.length > 0) {
+          dailyVacData.forEach(entry => {
+            const record = targetRecords.find(r => r.id === entry.weekly_record_id);
+            if (record && !addedServerIds.has(record.server_id)) {
+              if (serverIds.length === 0 || serverIds.includes(record.server_id)) {
+                addedServerIds.add(record.server_id);
+                const server = serversData?.find((s: any) => s.id === record.server_id);
+                vacationData.push({
+                  id: `daily-${record.server_id}`,
+                  name: server?.name || 'Desconhecido',
+                  matricula: server?.matricula || '',
+                  status: 'Férias',
+                  month: displayPeriodName,
+                  year: selectedYear
+                });
+              }
+            }
+          });
+        }
+      }
 
       setVacationServers(vacationData);
     } catch (error) {
@@ -723,7 +860,9 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">Servidores em Férias</h2>
-                  <p className="text-xs text-slate-400">{monthNames[new Date().getMonth()]} de {new Date().getFullYear()}</p>
+                  <p className="text-xs text-slate-400">
+                    {selectedWeek > 0 ? `Semana Epidemiológica ${selectedWeek} de ${selectedYear}` : `${monthNames[new Date().getMonth()]} de ${new Date().getFullYear()}`}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setIsVacationsModalOpen(false)} className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-white hover:bg-gray-700">
@@ -739,7 +878,7 @@ const Dashboard: React.FC = () => {
               ) : vacationServers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                   <span className="material-symbols-outlined text-4xl text-slate-500">event_available</span>
-                  <p className="text-sm text-slate-500">Nenhum servidor em férias neste mês</p>
+                  <p className="text-sm text-slate-500">Nenhum servidor em férias {selectedWeek > 0 ? 'nesta semana' : 'neste mês'}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1144,9 +1283,13 @@ const Dashboard: React.FC = () => {
               <span className="material-symbols-outlined text-2xl">beach_access</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Férias no Mês</p>
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">
+                {selectedWeek > 0 ? `Férias na Sem. ${selectedWeek}` : 'Férias no Mês'}
+              </p>
               <p className="text-lg font-bold text-white">{loadingStats ? '...' : stats.vacationsCount} servidor(es)</p>
-              <p className="text-[10px] text-slate-500">{monthNames[new Date().getMonth()]}</p>
+              <p className="text-[10px] text-slate-500">
+                {selectedWeek > 0 ? 'Na semana selecionada' : monthNames[new Date().getMonth()]}
+              </p>
             </div>
             <div className="size-8 flex items-center justify-center rounded-full text-blue-400 group-hover:bg-blue-500/20 transition-colors">
               <span className="material-symbols-outlined">chevron_right</span>
