@@ -371,6 +371,28 @@ const Servers: React.FC = () => {
 
       console.log('Update successful, returned data:', data);
 
+      // Cascata: Se o servidor editado for um Supervisor de Área e alterarmos o seu Supervisor Geral
+      if (updatedServer.role === 'Supervisor de Área' && updatedServer.supervisor_geral_id) {
+        // 1. Encontrar o usuário correspondente
+        const { data: userData } = await (supabase.from('users') as any)
+          .select('id')
+          .eq('name', updatedServer.name)
+          .eq('role', 'supervisor_area')
+          .single();
+
+        if (userData) {
+          // 2. Atualizar a tabela users para manter sincronizado
+          await (supabase.from('users') as any)
+            .update({ supervisor_geral_id: updatedServer.supervisor_geral_id })
+            .eq('id', userData.id);
+
+          // 3. Atualizar todos os servidores subordinados a este supervisor de área
+          await (supabase.from('servers') as any)
+            .update({ supervisor_geral_id: updatedServer.supervisor_geral_id })
+            .eq('supervisor_area_id', userData.id);
+        }
+      }
+
       // Recarregar os dados para atualizar tanto a lista quanto a hierarquia
       await fetchServers();
       setEditingServer(null);

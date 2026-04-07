@@ -299,9 +299,14 @@ const Reports: React.FC = () => {
         record.daily_entries.forEach(entry => {
           totalDays += entry.worked_days || 0;
           totalProduction += entry.production || 0;
+          
+          let absenceValue = 0;
+          if (entry.worked_days === 0) absenceValue = 1;
+          else if (entry.worked_days === 0.5) absenceValue = 0.5;
+
           // Conta qualquer tipo de ausência (inclusive atestado e meio período com ausência)
-          if (absenceOptions.includes(entry.status || '')) {
-            totalFaltas++;
+          if (absenceValue > 0 && absenceOptions.includes(entry.status || '')) {
+            totalFaltas += absenceValue;
           }
           if (entry.status === 'Férias') {
             totalFerias++;
@@ -365,24 +370,34 @@ const Reports: React.FC = () => {
         });
       }
 
-      // Buscar registros semanais com entradas diárias
-      const { data: weeklyRecords, error: weeklyError } = await supabase
-        .from('weekly_records')
-        .select(`
-          id,
-          server_id,
-          week_number,
-          year,
-          daily_entries (
+      // Buscar registros semanais com entradas diárias (paginado para evitar limite de 1000 linhas do Supabase)
+      let allWeeklyRecords: any[] = [];
+      const chunkSize = 10;
+      
+      for (let i = 0; i < serverIds.length; i += chunkSize) {
+        const chunk = serverIds.slice(i, i + chunkSize);
+        const { data: weeklyRecords, error: weeklyError } = await supabase
+          .from('weekly_records')
+          .select(`
             id,
-            status
-          )
-        `)
-        .eq('year', analysisYear)
-        .in('week_number', analysisWeeks)
-        .in('server_id', serverIds);
+            server_id,
+            week_number,
+            year,
+            daily_entries (
+              id,
+              status,
+              worked_days
+            )
+          `)
+          .eq('year', analysisYear)
+          .in('week_number', analysisWeeks)
+          .in('server_id', chunk);
 
-      if (weeklyError) throw weeklyError;
+        if (weeklyError) throw weeklyError;
+        if (weeklyRecords) {
+          allWeeklyRecords = [...allWeeklyRecords, ...weeklyRecords];
+        }
+      }
 
       // Processar dados por servidor
       const analysisMap: Record<string, ServerAbsenceAnalysis> = {};
@@ -402,17 +417,23 @@ const Reports: React.FC = () => {
       });
 
       // Contabilizar ocorrências
-      (weeklyRecords || []).forEach((record: any) => {
+      (allWeeklyRecords || []).forEach((record: any) => {
         const entries = record.daily_entries || [];
         entries.forEach((entry: any) => {
           if (!analysisMap[record.server_id]) return;
 
-          if (entry.status === 'Falta Sem Justificativa') {
-            analysisMap[record.server_id].faltasSemJustificativa++;
-          } else if (entry.status === 'Falta Justificada') {
-            analysisMap[record.server_id].faltasJustificadas++;
-          } else if (entry.status === 'Atestado Médico') {
-            analysisMap[record.server_id].atestadosMedicos++;
+          let absenceValue = 0;
+          if (entry.worked_days === 0) absenceValue = 1;
+          else if (entry.worked_days === 0.5) absenceValue = 0.5;
+
+          if (absenceValue > 0) {
+            if (entry.status === 'Falta Sem Justificativa') {
+              analysisMap[record.server_id].faltasSemJustificativa += absenceValue;
+            } else if (entry.status === 'Falta Justificada') {
+              analysisMap[record.server_id].faltasJustificadas += absenceValue;
+            } else if (entry.status === 'Atestado Médico') {
+              analysisMap[record.server_id].atestadosMedicos += absenceValue;
+            }
           }
         });
       });

@@ -139,6 +139,28 @@ const Users: React.FC = () => {
 
       if (error) throw error;
 
+      // Cascata: Se for supervisor de área e alterou o supervisor geral
+      if (updatedUser.role === 'supervisor_area' && updatedUser.supervisor_geral_id) {
+        // Atualiza todos os servidores vinculados a esta área
+        const { error: serversError } = await (supabase.from('servers') as any)
+          .update({ supervisor_geral_id: updatedUser.supervisor_geral_id })
+          .eq('supervisor_area_id', updatedUser.id);
+          
+        if (serversError) {
+          console.error('Erro ao atualizar supervisor geral nos servidores vinculados:', serversError);
+        }
+
+        // Tentar atualizar o registro do próprio supervisor na tabela servers (se existir)
+        const { error: selfServerError } = await (supabase.from('servers') as any)
+          .update({ supervisor_geral_id: updatedUser.supervisor_geral_id })
+          .eq('name', updatedUser.name)
+          .eq('role', 'Supervisor de Área');
+
+        if (selfServerError) {
+          console.error('Erro ao atualizar o próprio servidor:', selfServerError);
+        }
+      }
+
       setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
       setEditingUser(null);
       alert('Usuário atualizado com sucesso!');
