@@ -1,6 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { Tables, InsertTables, UpdateTables } from '../lib/database.types';
 import EditServerModal from '../components/EditServerModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -460,6 +463,129 @@ const Servers: React.FC = () => {
   // Verificar se deve expandir automaticamente (quando há busca ativa)
   const shouldAutoExpand = searchTerm.length > 0;
 
+  const generateHierarchicalExcel = (data: SupervisorGeralWithArea[], filename: string) => {
+    const exportAOA: any[][] = [];
+
+    data.forEach(supGeral => {
+      exportAOA.push([`SUPERVISOR GERAL: ${supGeral.name.toUpperCase()}`]);
+      exportAOA.push([]); 
+
+      supGeral.supervisoresArea.forEach(supArea => {
+        exportAOA.push([`Supervisor de Área: ${supArea.name}`]);
+        exportAOA.push(['Nome do Servidor', 'Matrícula', 'Função', 'Vínculo', 'Status']);
+        
+        supArea.servidores.forEach(server => {
+          exportAOA.push([
+            server.name,
+            server.matricula,
+            server.role,
+            server.vinculo || '-',
+            server.status === 'active' ? 'Ativo' :
+            server.status === 'inactive' ? 'Inativo' :
+            server.status === 'vacation' ? 'Férias' :
+            server.status === 'leave' ? 'Afastado' : server.status
+          ]);
+        });
+        exportAOA.push([]); // blank line after each area
+      });
+      exportAOA.push([]); // blank line after each geral
+    });
+
+    if (exportAOA.length === 0) {
+      alert("Nenhum dado para exportar.");
+      return;
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(exportAOA);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Servidores");
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const generateHierarchicalPDF = (data: SupervisorGeralWithArea[], title: string, filename: string) => {
+    const doc = new jsPDF('portrait');
+    
+    doc.setFontSize(16);
+    doc.text(title, 14, 20);
+    
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${new Date().toLocaleString()}`, 14, 28);
+
+    let currentY = 35;
+
+    data.forEach(supGeral => {
+      if (currentY > 270) { doc.addPage(); currentY = 20; }
+      
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(`SUPERVISOR GERAL: ${supGeral.name.toUpperCase()}`, 14, currentY);
+      currentY += 8;
+
+      supGeral.supervisoresArea.forEach(supArea => {
+        if (currentY > 270) { doc.addPage(); currentY = 20; }
+        
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(`Supervisor de Área: ${supArea.name}`, 14, currentY);
+        currentY += 4;
+
+        const tableRows = supArea.servidores.map(server => [
+          server.name,
+          server.matricula,
+          server.role,
+          server.vinculo || '-',
+          server.status === 'active' ? 'Ativo' :
+          server.status === 'inactive' ? 'Inativo' :
+          server.status === 'vacation' ? 'Férias' :
+          server.status === 'leave' ? 'Afastado' : server.status
+        ]);
+
+        if (tableRows.length > 0) {
+          autoTable(doc, {
+            startY: currentY,
+            head: [['Nome do Servidor', 'Matrícula', 'Função', 'Vínculo', 'Status']],
+            body: tableRows,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [59, 130, 246] },
+            margin: { left: 14, right: 14 },
+          });
+          currentY = (doc as any).lastAutoTable.finalY + 8;
+        } else {
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          doc.text("Nenhum servidor vinculado.", 14, currentY);
+          currentY += 8;
+        }
+      });
+      currentY += 5;
+    });
+
+    doc.save(filename);
+  };
+
+  const exportAll = (format: 'excel' | 'pdf') => {
+    if (hierarchyData.length === 0) {
+      alert("Nenhum dado para exportar.");
+      return;
+    }
+
+    if (format === 'excel') {
+      generateHierarchicalExcel(hierarchyData, "Todos_Servidores_Hierarquia.xlsx");
+    } else {
+      generateHierarchicalPDF(hierarchyData, "Relatório de Servidores - Hierarquia Completa", "Todos_Servidores_Hierarquia.pdf");
+    }
+  };
+
+  const exportSupervisorGeral = (supGeral: SupervisorGeralWithArea, format: 'excel' | 'pdf', e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (format === 'excel') {
+      generateHierarchicalExcel([supGeral], `Servidores_${supGeral.name.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+    } else {
+      generateHierarchicalPDF([supGeral], `Relatório de Servidores - Equipe: ${supGeral.name}`, `Servidores_${supGeral.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-full">
       <header className="sticky top-0 z-10 bg-background-dark/95 backdrop-blur-md border-b border-gray-800 px-4 py-3 flex items-center justify-between">
@@ -473,13 +599,33 @@ const Servers: React.FC = () => {
       </header>
 
       <main className="flex-1 p-4 space-y-4">
-        <button
-          onClick={handleOpenModal}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-white font-bold shadow-lg shadow-primary/25 hover:bg-blue-600 transition-all active:scale-[0.98]"
-        >
-          <span className="material-symbols-outlined">person_add</span>
-          <span>Adicionar Novo Servidor</span>
-        </button>
+        <div className="flex gap-2 w-full">
+          <button
+            onClick={handleOpenModal}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-white font-bold shadow-lg shadow-primary/25 hover:bg-blue-600 transition-all active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined">person_add</span>
+            <span>Adicionar Novo Servidor</span>
+          </button>
+          
+          <button
+            onClick={() => exportAll('excel')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3.5 text-white font-bold shadow-lg shadow-emerald-600/25 hover:bg-emerald-500 transition-all active:scale-[0.98]"
+            title="Exportar Todos para Excel"
+          >
+            <span className="material-symbols-outlined">table_view</span>
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+
+          <button
+            onClick={() => exportAll('pdf')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3.5 text-white font-bold shadow-lg shadow-red-600/25 hover:bg-red-500 transition-all active:scale-[0.98]"
+            title="Exportar Todos para PDF"
+          >
+            <span className="material-symbols-outlined">picture_as_pdf</span>
+            <span className="hidden sm:inline">PDF</span>
+          </button>
+        </div>
 
         <div className="relative">
           <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
@@ -612,9 +758,9 @@ const Servers: React.FC = () => {
               return (
                 <div key={supGeral.id} className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-transparent overflow-hidden shadow-lg">
                   {/* Header Supervisor Geral - Clicável */}
-                  <button
+                  <div
                     onClick={() => toggleGeralExpanded(supGeral.id)}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3 hover:from-blue-500/25 transition-all cursor-pointer"
+                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-500/15 to-transparent border-b border-blue-500/20 flex items-center gap-3 hover:from-blue-500/25 transition-all cursor-pointer select-none"
                   >
                     <div className="p-2 rounded-xl bg-blue-500/20 border border-blue-500/30">
                       <span className="material-symbols-outlined text-blue-400">supervisor_account</span>
@@ -623,13 +769,32 @@ const Servers: React.FC = () => {
                       <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Supervisor Geral</p>
                       <p className="text-sm font-bold text-white">{supGeral.name}</p>
                     </div>
+
+                    <div className="flex gap-1.5 mr-2">
+                      <button
+                        onClick={(e) => exportSupervisorGeral(supGeral, 'excel', e)}
+                        className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 border border-emerald-500/30 hover:text-white transition-all flex items-center"
+                        title="Exportar para Excel"
+                      >
+                        <span className="material-symbols-outlined text-sm">table_view</span>
+                      </button>
+                      
+                      <button
+                        onClick={(e) => exportSupervisorGeral(supGeral, 'pdf', e)}
+                        className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 border border-red-500/30 hover:text-white transition-all flex items-center"
+                        title="Exportar para PDF"
+                      >
+                        <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                      </button>
+                    </div>
+
                     <span className="px-2 py-1 rounded-lg bg-blue-500/20 text-blue-400 text-[10px] font-bold border border-blue-500/30">
                       {totalServidores} servidores
                     </span>
                     <span className={`material-symbols-outlined text-blue-400 transition-transform duration-300 ${isGeralExpanded ? 'rotate-180' : ''}`}>
                       expand_more
                     </span>
-                  </button>
+                  </div>
 
                   {/* Supervisores de Área - Colapsável */}
                   <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isGeralExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'}`}>
