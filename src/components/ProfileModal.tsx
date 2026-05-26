@@ -8,7 +8,7 @@ interface ProfileModalProps {
 }
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
-    const { userProfile, user } = useAuth();
+    const { userProfile, user, signOut } = useAuth();
     const [uploadingImage, setUploadingImage] = useState(false);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +149,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
                         {uploadingImage ? 'Enviando...' : 'Alterar Foto'}
                     </button>
 
-                    <p className="text-[10px] text-center text-gray-600">
+                    <button
+                        onClick={() => {
+                            onClose();
+                            signOut();
+                        }}
+                        className="w-full py-3 px-4 bg-red-500/10 hover:bg-red-500/20 active:bg-red-500/30 border border-red-500/50 rounded-xl text-sm font-medium text-red-500 flex items-center justify-center gap-2 transition-all mt-2"
+                    >
+                        <span className="material-symbols-outlined text-lg">logout</span>
+                        Sair da Conta
+                    </button>
+
+                    <p className="text-[10px] text-center text-gray-600 mt-2">
                         Formatos: .jpg, .png (Máx 2MB)
                     </p>
                 </div>
