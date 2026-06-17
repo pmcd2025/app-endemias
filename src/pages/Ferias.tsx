@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const STORAGE_KEY = 'ferias_programacoes';
 
@@ -453,6 +455,68 @@ const Ferias: React.FC = () => {
     setProgramSelections({});
   };
 
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    
+    // Agrupar servidores programados por mês
+    const groupedByMonth: Record<string, typeof servidoresProgramados> = {};
+    servidoresProgramados.forEach(s => {
+      if (s.programacao) {
+        const key = `${s.programacao.month}/${s.programacao.year}`;
+        if (!groupedByMonth[key]) groupedByMonth[key] = [];
+        groupedByMonth[key].push(s);
+      }
+    });
+
+    // Ordenar meses
+    const sortedMonths = Object.keys(groupedByMonth).sort();
+    
+    let yPosition = 20;
+    
+    doc.setFontSize(18);
+    doc.text('Programação de Férias', 14, yPosition);
+    yPosition += 10;
+    
+    doc.setFontSize(10);
+    doc.text(`Fundo Municipal de Saúde de Itabuna - ${new Date().toLocaleDateString('pt-BR')}`, 14, yPosition);
+    yPosition += 15;
+
+    sortedMonths.forEach((monthKey, index) => {
+      const [month, year] = monthKey.split('/');
+      const monthName = MONTH_NAMES[parseInt(month, 10) - 1];
+      
+      doc.setFontSize(14);
+      doc.text(`${monthName} ${year}`, 14, yPosition);
+      yPosition += 8;
+      
+      const tableData = groupedByMonth[monthKey].map(s => [
+        s.matricula,
+        s.nome,
+        s.admissao,
+        `${s.feriasVencidas} período(s)`
+      ]);
+      
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Matrícula', 'Nome', 'Admissão', 'Férias Vencidas']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [234, 179, 8] }, // yellow-500
+        styles: { fontSize: 8 },
+        margin: { top: yPosition, left: 14, right: 14 }
+      });
+      
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      
+      if (index < sortedMonths.length - 1 && yPosition > 250) {
+        doc.addPage();
+        yPosition = 20;
+      }
+    });
+
+    doc.save('programacao_ferias.pdf');
+  };
+
   const handleDelete = () => {
     if (!deleteServer) return;
     const updatedData = data.filter(s => s.matricula !== deleteServer.matricula);
@@ -853,7 +917,7 @@ const Ferias: React.FC = () => {
           onClick={() => setIsProgramModalOpen(false)}
         >
           <div
-            className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[80vh]"
+            className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[80vh]"
             onClick={e => e.stopPropagation()}
           >
             {/* Cabeçalho compacto */}
@@ -1027,6 +1091,13 @@ const Ferias: React.FC = () => {
                   className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black py-2 rounded-lg text-xs font-bold transition-all"
                 >
                   Programar
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  disabled={servidoresProgramados.length === 0}
+                  className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 rounded-lg text-xs font-bold transition-all"
+                >
+                  Exportar PDF
                 </button>
               </div>
             </div>
