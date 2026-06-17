@@ -8,6 +8,7 @@ import Ponto from './pages/Ponto';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
 import SubmissionMonitoring from './pages/SubmissionMonitoring';
+import Ferias from './pages/Ferias';
 import Layout from './components/Layout';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -76,10 +77,11 @@ const AppRoutes = () => {
         <Route path="/ponto" element={<Ponto />} />
         <Route path="/reports" element={<Reports />} />
 
-        {/* Rota protegida para gestor e admin - Servidores e Monitoramento */}
+        {/* Rota protegida para gestor e admin - Servidores, Monitoramento e Férias */}
         <Route element={<GestorOrAdminRoute />}>
           <Route path="/servers" element={<Servers />} />
           <Route path="/monitoring" element={<SubmissionMonitoring />} />
+          <Route path="/ferias" element={<Ferias />} />
         </Route>
 
         {/* Rota protegida apenas para admin - Usuários */}

@@ -16,6 +16,7 @@ const Layout: React.FC = () => {
     { label: 'Servidores', icon: 'dns', path: '/servers', gestorOrAdmin: true },
     { label: 'Relatórios', icon: 'analytics', path: '/reports' },
     { label: 'Monitoramento', icon: 'monitoring', path: '/monitoring', gestorOrAdmin: true },
+    { label: 'Férias', icon: 'beach_access', path: '/ferias', gestorOrAdmin: true },
     { label: 'Usuários', icon: 'group', path: '/users', adminOnly: true }
   ];
 
@@ -142,8 +143,8 @@ const Layout: React.FC = () => {
       </main>
 
       {/* Mobile Navigation - Apple-style Glassmorphism */}
-      <nav className="md:hidden fixed bottom-0 z-50 w-full glass border-t border-white/10 pb-safe shadow-[0_-8px_32px_rgba(0,0,0,0.4)]">
-        <div className={`grid h-16 ${navItems.length === 6 ? 'grid-cols-6' : navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+      <nav className="md:hidden fixed bottom-0 z-50 w-full glass border-t border-white/10 pb-safe shadow-[0_-8px_32px_rgba(0,0,0,0.4)] overflow-x-auto scrollbar-hide">
+        <div className={`grid h-16 min-w-full ${navItems.length >= 7 ? 'grid-cols-7' : navItems.length === 6 ? 'grid-cols-6' : navItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4'} ${navItems.length >= 7 ? 'w-[120%]' : ''}`}>
           <NavContent />
         </div>
       </nav>
