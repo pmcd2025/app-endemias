@@ -1,4 +1,82 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+
+const STORAGE_KEY = 'ferias_programacoes';
+
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+type FeriasProgramacao = {
+  month: string;
+  year: number;
+};
+
+type ServidorFerias = {
+  matricula: string;
+  nome: string;
+  admissao: string;
+  feriasVencidas: number;
+  programacao?: FeriasProgramacao | null;
+};
+
+const getProgramYear = (month: string) => {
+  const now = new Date();
+  const monthNum = parseInt(month, 10);
+  const currentMonth = now.getMonth() + 1;
+  return monthNum < currentMonth ? now.getFullYear() + 1 : now.getFullYear();
+};
+
+const formatProgramacao = (prog: FeriasProgramacao) =>
+  `${MONTH_NAMES[parseInt(prog.month, 10) - 1]}/${prog.year}`;
+
+const isBaixaDue = (prog: FeriasProgramacao) => {
+  const now = new Date();
+  const progDate = new Date(prog.year, parseInt(prog.month, 10) - 1, 1);
+  return now >= progDate;
+};
+
+const loadProgramacoes = (): Record<string, FeriasProgramacao> => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveProgramacoes = (data: ServidorFerias[]) => {
+  const programacoes: Record<string, FeriasProgramacao> = {};
+  data.forEach(s => {
+    if (s.programacao) programacoes[s.matricula] = s.programacao;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(programacoes));
+};
+
+const applyPendingBaixas = (servidores: ServidorFerias[]): { data: ServidorFerias[]; changed: boolean } => {
+  let changed = false;
+  const updated = servidores.map(s => {
+    if (s.programacao && isBaixaDue(s.programacao)) {
+      changed = true;
+      return {
+        ...s,
+        feriasVencidas: Math.max(0, s.feriasVencidas - 1),
+        programacao: null,
+      };
+    }
+    return s;
+  });
+  if (changed) saveProgramacoes(updated);
+  return { data: updated, changed };
+};
+
+const mergeProgramacoes = (servidores: ServidorFerias[]): ServidorFerias[] => {
+  const stored = loadProgramacoes();
+  return servidores.map(s => ({
+    ...s,
+    programacao: stored[s.matricula] ?? s.programacao ?? null,
+  }));
+};
 
 const parseDate = (dateStr: string) => {
   const [day, month, year] = dateStr.split('/').map(Number);
@@ -12,10 +90,31 @@ const formatDate = (date: Date) => {
   return `${day}/${month}/${year}`;
 };
 
-const calculateVacationInfo = (admissaoStr: string, feriasVencidasDb: number) => {
+const calculateVacationInfo = (
+  admissaoStr: string,
+  feriasVencidasDb: number,
+  programacao?: FeriasProgramacao | null
+) => {
+  // Defensive parsing – if the date string is malformed, fall back to today
   const admissaoDate = parseDate(admissaoStr);
+  if (isNaN(admissaoDate.getTime())) {
+    console.warn('Invalid admission date:', admissaoStr);
+    return {
+      periodosAdquiridos: 0,
+      feriasGozadas: 0,
+      feriasDisponiveis: feriasVencidasDb,
+      inicioProximoPeriodo: '-',
+      fimProximoPeriodo: '-',
+      proximoVencimento: '-',
+      status: programacao
+        ? `Programado: ${formatProgramacao(programacao)}`
+        : feriasVencidasDb > 0
+          ? `${feriasVencidasDb} Período(s) Vencido(s)`
+          : 'Em dia',
+    };
+  }
+
   const currentDate = new Date();
-  
   let periodosAdquiridos = currentDate.getFullYear() - admissaoDate.getFullYear();
   const m = currentDate.getMonth() - admissaoDate.getMonth();
   if (m < 0 || (m === 0 && currentDate.getDate() < admissaoDate.getDate())) {
@@ -24,7 +123,7 @@ const calculateVacationInfo = (admissaoStr: string, feriasVencidasDb: number) =>
   if (periodosAdquiridos < 0) periodosAdquiridos = 0;
 
   const feriasGozadas = Math.max(0, periodosAdquiridos - feriasVencidasDb);
-  
+
   const inicioProximo = new Date(admissaoDate.getFullYear() + periodosAdquiridos, admissaoDate.getMonth(), admissaoDate.getDate());
   const fimProximo = new Date(admissaoDate.getFullYear() + periodosAdquiridos + 1, admissaoDate.getMonth(), admissaoDate.getDate());
 
@@ -35,7 +134,11 @@ const calculateVacationInfo = (admissaoStr: string, feriasVencidasDb: number) =>
     inicioProximoPeriodo: formatDate(inicioProximo),
     fimProximoPeriodo: formatDate(fimProximo),
     proximoVencimento: formatDate(fimProximo),
-    status: feriasVencidasDb > 0 ? `${feriasVencidasDb} Período(s) Vencido(s)` : 'Em dia'
+    status: programacao
+      ? `Programado: ${formatProgramacao(programacao)}`
+      : feriasVencidasDb > 0
+        ? `${feriasVencidasDb} Período(s) Vencido(s)`
+        : 'Em dia',
   };
 };
 
@@ -225,14 +328,41 @@ const FERIAS_DATA = [
 ];
 
 const Ferias: React.FC = () => {
-  const [data, setData] = useState(FERIAS_DATA);
+  const [data, setData] = useState<ServidorFerias[]>(() =>
+    applyPendingBaixas(mergeProgramacoes(FERIAS_DATA)).data
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newServidor, setNewServidor] = useState({ matricula: '', nome: '', admissao: '', feriasVencidas: 0 });
   const [viewServer, setViewServer] = useState<any>(null);
   const [editServer, setEditServer] = useState<any>(null);
-  const [deleteServer, setDeleteServer] = useState<any>(null);
   const [expandedLetters, setExpandedLetters] = useState<string[]>([]);
+  const [deleteServer, setDeleteServer] = useState<any>(null);
+  const [isProgramModalOpen, setIsProgramModalOpen] = useState(false);
+  const [programModalTab, setProgramModalTab] = useState<'programados' | 'novos'>('novos');
+  const [programSelections, setProgramSelections] = useState<Record<string, { selected: boolean; month: string }>>({});
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setData(prev => {
+        const { data: updated, changed } = applyPendingBaixas(prev);
+        return changed ? updated : prev;
+      });
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const servidoresProgramados = useMemo(() => {
+    return data
+      .filter(s => s.programacao)
+      .sort((a, b) => {
+        const pa = a.programacao!;
+        const pb = b.programacao!;
+        const dateA = new Date(pa.year, parseInt(pa.month, 10) - 1).getTime();
+        const dateB = new Date(pb.year, parseInt(pb.month, 10) - 1).getTime();
+        return dateA - dateB || a.nome.localeCompare(b.nome);
+      });
+  }, [data]);
 
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
@@ -282,12 +412,55 @@ const Ferias: React.FC = () => {
     setEditServer(null);
   };
 
+  const servidoresVencidos = useMemo(() => {
+    return data
+      .filter(s => s.feriasVencidas > 0 && !s.programacao)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [data]);
+
+  const openProgramModal = () => {
+    const selections: Record<string, { selected: boolean; month: string }> = {};
+    servidoresVencidos.forEach(s => {
+      selections[s.matricula] = { selected: false, month: '' };
+    });
+    setProgramSelections(selections);
+    setProgramModalTab(servidoresProgramados.length > 0 ? 'programados' : 'novos');
+    setIsProgramModalOpen(true);
+  };
+
+  const handleCancelProgramacao = (matricula: string) => {
+    const updatedData = data.map(s =>
+      s.matricula === matricula ? { ...s, programacao: null } : s
+    );
+    setData(updatedData);
+    saveProgramacoes(updatedData);
+  };
+
+  const handleProgramMultipleSave = () => {
+    const updatedData = data.map(s => {
+      const sel = programSelections[s.matricula];
+      if (sel && sel.selected && sel.month) {
+        return {
+          ...s,
+          programacao: { month: sel.month, year: getProgramYear(sel.month) },
+        };
+      }
+      return s;
+    });
+    setData(updatedData);
+    saveProgramacoes(updatedData);
+    setIsProgramModalOpen(false);
+    setProgramSelections({});
+  };
+
   const handleDelete = () => {
     if (!deleteServer) return;
     const updatedData = data.filter(s => s.matricula !== deleteServer.matricula);
     setData(updatedData);
+    saveProgramacoes(updatedData);
     setDeleteServer(null);
   };
+
 
   const stats = useMemo(() => {
     let totalVencidas = 0;
@@ -296,7 +469,7 @@ const Ferias: React.FC = () => {
     let minDate = Infinity;
 
     data.forEach(item => {
-      const info = calculateVacationInfo(item.admissao, item.feriasVencidas);
+      const info = calculateVacationInfo(item.admissao, item.feriasVencidas, item.programacao);
       if (info.feriasDisponiveis > 0) totalVencidas++;
       else totalEmDia++;
 
@@ -322,12 +495,20 @@ const Ferias: React.FC = () => {
             Fundo Municipal de Saúde de Itabuna - Controle de férias dos servidores.
           </p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 active:scale-95 w-full md:w-auto justify-center">
-          <span className="material-symbols-outlined">add</span>
-          Add
-        </button>
+        <div className="flex gap-3 w-full md:w-auto">
+          <button 
+            onClick={openProgramModal}
+            className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 text-black px-4 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-yellow-500/20 active:scale-95 w-full md:w-auto justify-center">
+            <span className="material-symbols-outlined">event_note</span>
+            Programação
+          </button>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 active:scale-95 w-full md:w-auto justify-center">
+            <span className="material-symbols-outlined">add</span>
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Cards de Resumo */}
@@ -439,7 +620,7 @@ const Ferias: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-border-dark">
                               {group.items.map((item) => {
-                                const info = calculateVacationInfo(item.admissao, item.feriasVencidas);
+                                const info = calculateVacationInfo(item.admissao, item.feriasVencidas, item.programacao);
                                 return (
                                 <tr key={item.matricula} className="hover:bg-[#151515] transition-colors">
                                   <td className="px-4 py-4 whitespace-nowrap">
@@ -463,9 +644,11 @@ const Ferias: React.FC = () => {
                                   <td className="px-4 py-4 whitespace-nowrap">
                                     <div className="flex justify-center">
                                       <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
-                                        info.feriasDisponiveis > 0 
-                                          ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                                          : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                        item.programacao
+                                          ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                          : info.feriasDisponiveis > 0 
+                                            ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
+                                            : 'bg-green-500/10 text-green-400 border border-green-500/20'
                                       }`}>
                                         {info.status}
                                       </span>
@@ -614,7 +797,7 @@ const Ferias: React.FC = () => {
               <div className="w-full space-y-3 bg-[#1A1A1A] p-5 rounded-2xl border border-border-dark text-sm">
                 
                 {(() => {
-                  const info = calculateVacationInfo(viewServer.admissao, viewServer.feriasVencidas);
+                  const info = calculateVacationInfo(viewServer.admissao, viewServer.feriasVencidas, viewServer.programacao);
                   return (
                     <>
                       <div className="flex justify-between items-center pb-3 border-b border-white/5">
@@ -645,9 +828,11 @@ const Ferias: React.FC = () => {
                       <div className="flex justify-between items-center pt-1">
                         <span className="text-gray-400">Situação Atual</span>
                         <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
-                            info.feriasDisponiveis > 0 
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                              : 'bg-green-500/20 text-green-400 border border-green-500/30'
+                            viewServer.programacao
+                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                              : info.feriasDisponiveis > 0 
+                                ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                                : 'bg-green-500/20 text-green-400 border border-green-500/30'
                           }`}>
                           {info.status}
                         </span>
@@ -655,6 +840,194 @@ const Ferias: React.FC = () => {
                     </>
                   );
                 })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Programação de Férias */}
+      {isProgramModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => setIsProgramModalOpen(false)}
+        >
+          <div
+            className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[80vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Cabeçalho compacto */}
+            <div className="px-4 py-3 border-b border-border-dark flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-yellow-400 text-[18px]">event_note</span>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-white truncate">Programação de Férias</h3>
+                  <p className="text-xs text-gray-500 truncate">Agende e consulte gozos programados</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsProgramModalOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors p-1 rounded-full hover:bg-white/10 shrink-0"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Abas */}
+            <div className="flex border-b border-border-dark shrink-0">
+              <button
+                onClick={() => setProgramModalTab('programados')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition-colors ${
+                  programModalTab === 'programados'
+                    ? 'text-yellow-400 border-b-2 border-yellow-400 bg-yellow-500/5'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">schedule</span>
+                Programados
+                {servidoresProgramados.length > 0 && (
+                  <span className="bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                    {servidoresProgramados.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setProgramModalTab('novos')}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition-colors ${
+                  programModalTab === 'novos'
+                    ? 'text-yellow-400 border-b-2 border-yellow-400 bg-yellow-500/5'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">person_add</span>
+                Programar
+                {servidoresVencidos.length > 0 && (
+                  <span className="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                    {servidoresVencidos.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Conteúdo com scroll */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {programModalTab === 'programados' ? (
+                servidoresProgramados.length > 0 ? (
+                  <ul className="divide-y divide-border-dark">
+                    {servidoresProgramados.map(s => (
+                      <li key={s.matricula} className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02]">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-xs font-medium truncate">{s.nome}</p>
+                          <p className="text-gray-600 text-[10px] font-mono">{s.matricula}</p>
+                        </div>
+                        <span className="shrink-0 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap">
+                          {formatProgramacao(s.programacao!)}
+                        </span>
+                        <button
+                          onClick={() => handleCancelProgramacao(s.matricula)}
+                          className="shrink-0 p-1 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-md transition-colors"
+                          title="Cancelar programação"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">close</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="py-10 px-4 text-center">
+                    <span className="material-symbols-outlined text-3xl text-gray-600 mb-2 block">event_busy</span>
+                    <p className="text-gray-500 text-xs">Nenhum servidor programado no momento.</p>
+                  </div>
+                )
+              ) : servidoresVencidos.length > 0 ? (
+                <ul className="divide-y divide-border-dark">
+                  {servidoresVencidos.map(s => {
+                    const sel = programSelections[s.matricula] || { selected: false, month: '' };
+                    return (
+                      <li
+                        key={s.matricula}
+                        className={`flex items-center gap-2 px-3 py-2 ${sel.selected ? 'bg-yellow-500/5' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-yellow-500 w-3.5 h-3.5 cursor-pointer shrink-0"
+                          checked={sel.selected}
+                          onChange={(e) => {
+                            setProgramSelections(prev => ({
+                              ...prev,
+                              [s.matricula]: { ...prev[s.matricula], selected: e.target.checked }
+                            }));
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-xs font-medium truncate">{s.nome}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-gray-600 text-[10px] font-mono">{s.matricula}</span>
+                            <span className="bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                              {s.feriasVencidas} venc.
+                            </span>
+                          </div>
+                        </div>
+                        <select
+                          value={sel.month}
+                          onChange={(e) => {
+                            setProgramSelections(prev => ({
+                              ...prev,
+                              [s.matricula]: { ...prev[s.matricula], month: e.target.value, selected: true }
+                            }));
+                          }}
+                          className="shrink-0 w-[110px] bg-[#1A1A1A] border border-border-dark text-white rounded-md px-2 py-1 text-[11px] focus:outline-none focus:border-yellow-500 transition-colors cursor-pointer"
+                        >
+                          <option value="">Mês...</option>
+                          <option value="01">Jan</option>
+                          <option value="02">Fev</option>
+                          <option value="03">Mar</option>
+                          <option value="04">Abr</option>
+                          <option value="05">Mai</option>
+                          <option value="06">Jun</option>
+                          <option value="07">Jul</option>
+                          <option value="08">Ago</option>
+                          <option value="09">Set</option>
+                          <option value="10">Out</option>
+                          <option value="11">Nov</option>
+                          <option value="12">Dez</option>
+                        </select>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="py-10 px-4 text-center">
+                  <span className="material-symbols-outlined text-3xl text-green-400 mb-2 block">check_circle</span>
+                  <p className="text-gray-500 text-xs">Nenhum servidor pendente de programação.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé compacto */}
+            <div className="px-3 py-3 border-t border-border-dark bg-[#0a0a0a] shrink-0">
+              <p className="text-[10px] text-gray-500 text-center mb-2.5">
+                {servidoresProgramados.length} programado(s) ·{' '}
+                {(Object.values(programSelections) as { selected: boolean; month: string }[]).filter(s => s.selected && s.month).length} selecionado(s)
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsProgramModalOpen(false)}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-400 border border-border-dark hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleProgramMultipleSave}
+                  disabled={
+                    (Object.values(programSelections) as { selected: boolean; month: string }[]).filter(s => s.selected && s.month).length === 0
+                  }
+                  className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black py-2 rounded-lg text-xs font-bold transition-all"
+                >
+                  Programar
+                </button>
               </div>
             </div>
           </div>
