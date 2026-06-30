@@ -4,9 +4,10 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from '../lib/supabase';
 import type { InsertTables, Tables } from '../lib/database.types';
 import { useAuth } from '../contexts/AuthContext';
+import { HISTORICO_FERIAS } from '../data/historicoFerias';
 
 const MONTH_NAMES = [
-  'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
@@ -109,9 +110,9 @@ const getInfo = (item: LinhaFerias) => {
       status: item.programacao
         ? `Programado: ${formatProgramacao(item.programacao)}`
         : item.feriasAtuais
-          ? `Em ferias ate ${formatDate(parseDate(item.feriasAtuais.periodEnd))}`
+          ? `Em férias até ${formatDate(parseDate(item.feriasAtuais.periodEnd))}`
           : item.feriasVencidas > 0
-            ? `${item.feriasVencidas} Periodo(s) Vencido(s)`
+            ? `${item.feriasVencidas} Período(s) Vencido(s)`
             : 'Em dia',
     };
   }
@@ -130,9 +131,9 @@ const getInfo = (item: LinhaFerias) => {
     status: item.programacao
       ? `Programado: ${formatProgramacao(item.programacao)}`
       : item.feriasAtuais
-        ? `Em ferias ate ${formatDate(parseDate(item.feriasAtuais.periodEnd))}`
+        ? `Em férias até ${formatDate(parseDate(item.feriasAtuais.periodEnd))}`
         : item.feriasVencidas > 0
-          ? `${item.feriasVencidas} Periodo(s) Vencido(s)`
+          ? `${item.feriasVencidas} Período(s) Vencido(s)`
           : 'Em dia',
   };
 };
@@ -147,6 +148,9 @@ const Ferias: React.FC = () => {
   const [isProgramModalOpen, setIsProgramModalOpen] = useState(false);
   const [programModalTab, setProgramModalTab] = useState<'programados' | 'novos'>('novos');
   const [programSelections, setProgramSelections] = useState<Record<string, ProgramSelection>>({});
+  
+  // Accordion state
+  const [expandedLetters, setExpandedLetters] = useState<string[]>([]);
 
   const fetchFeriasData = async () => {
     if (!userProfile) return;
@@ -202,14 +206,25 @@ const Ferias: React.FC = () => {
           return start <= now && end >= now;
         }) || null;
         const periodosAdquiridos = getPeriodosAdquiridos(hireDate);
+        const normalizedMatricula = server.matricula.replace(/[-_]/g, '');
+        const historico = HISTORICO_FERIAS[normalizedMatricula] || HISTORICO_FERIAS[server.matricula];
+
+        let historicalConsumed = 0;
+        if (historico && hireDate) {
+          // Na época da migração, quantas férias o servidor já havia gozado?
+          const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'));
+          historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
+        }
+
+        const totalConsumed = consumedCount + historicalConsumed;
 
         return {
           id: server.id,
           matricula: server.matricula,
           nome: server.name,
           admissao: hireDate ? formatDate(parseDate(hireDate)) : '-',
-          feriasVencidas: Math.max(0, periodosAdquiridos - consumedCount),
-          feriasGozadas: Math.min(periodosAdquiridos, consumedCount),
+          feriasVencidas: Math.max(0, periodosAdquiridos - totalConsumed),
+          feriasGozadas: Math.min(periodosAdquiridos, totalConsumed),
           programacao: futureVacation ? mapProgramacao(futureVacation) : null,
           feriasAtuais: activeVacation ? mapProgramacao(activeVacation) : null,
         };
@@ -218,7 +233,7 @@ const Ferias: React.FC = () => {
       setData(mapped);
     } catch (error) {
       console.error('Erro ao carregar dados de ferias:', error);
-      alert('Nao foi possivel carregar os dados de ferias.');
+      alert('Não foi possível carregar os dados de férias.');
     } finally {
       setLoading(false);
     }
@@ -246,6 +261,25 @@ const Ferias: React.FC = () => {
     return data.filter((item) => item.nome.toLowerCase().includes(lower) || item.matricula.toLowerCase().includes(lower));
   }, [data, searchTerm]);
 
+  const groupedData = useMemo(() => {
+    const groups: Record<string, typeof data> = {};
+    filteredData.forEach(item => {
+      const letter = item.nome.charAt(0).toUpperCase();
+      if (!groups[letter]) groups[letter] = [];
+      groups[letter].push(item);
+    });
+    return Object.keys(groups).sort().map(letter => ({
+      letter,
+      items: groups[letter]
+    }));
+  }, [filteredData]);
+
+  const toggleLetter = (letter: string) => {
+    setExpandedLetters(prev => 
+      prev.includes(letter) ? prev.filter(l => l !== letter) : [...prev, letter]
+    );
+  };
+
   const stats = useMemo(() => {
     let totalVencidas = 0;
     let totalEmDia = 0;
@@ -258,7 +292,8 @@ const Ferias: React.FC = () => {
       else totalEmDia++;
 
       if (info.proximoVencimento !== '-') {
-        const nextDate = parseDate(info.proximoVencimento).getTime();
+        const [d, m, y] = info.proximoVencimento.split('/').map(Number);
+        const nextDate = new Date(y, m - 1, d).getTime();
         if (nextDate > Date.now() && nextDate < minDate) {
           minDate = nextDate;
           proximoVencimento = { nome: item.nome, data: info.proximoVencimento };
@@ -280,7 +315,7 @@ const Ferias: React.FC = () => {
   };
 
   const handleCancelProgramacao = async (vacationId: string) => {
-    if (!window.confirm('Deseja cancelar esta programacao de ferias?')) return;
+    if (!window.confirm('Deseja cancelar esta programação de férias?')) return;
 
     setSaving(true);
     try {
@@ -288,8 +323,8 @@ const Ferias: React.FC = () => {
       if (error) throw error;
       await fetchFeriasData();
     } catch (error) {
-      console.error('Erro ao cancelar programacao:', error);
-      alert('Nao foi possivel cancelar a programacao.');
+      console.error('Erro ao cancelar programação:', error);
+      alert('Não foi possível cancelar a programação.');
     } finally {
       setSaving(false);
     }
@@ -317,18 +352,17 @@ const Ferias: React.FC = () => {
           year_reference: year,
           created_by: userProfile?.id || null,
           status: 'scheduled',
-          notes: 'Programacao criada pela tela de ferias',
+          notes: 'Programação criada pela tela de férias',
         };
       });
 
-      // Workaround para cenarios em que o client do Supabase infere o insert como `never`.
       const { error } = await supabase.from('vacations').insert(payload as unknown as never[]);
       if (error) throw error;
       setIsProgramModalOpen(false);
       await fetchFeriasData();
     } catch (error) {
       console.error('Erro ao programar ferias:', error);
-      alert('Nao foi possivel salvar a programacao de ferias.');
+      alert('Não foi possível salvar a programação de férias.');
     } finally {
       setSaving(false);
     }
@@ -344,33 +378,39 @@ const Ferias: React.FC = () => {
       grouped[key].push(item);
     });
 
-    let y = 20;
-    doc.setFontSize(18);
-    doc.text('Programacao de Ferias', 14, y);
-    y += 10;
-    doc.setFontSize(10);
-    doc.text(`Emitido em ${new Date().toLocaleDateString('pt-BR')}`, 14, y);
-    y += 15;
+    const sortedMonths = Object.keys(grouped).sort();
 
-    Object.keys(grouped).sort().forEach((key) => {
-      const [month, year] = key.split('/');
+    let yPosition = 20;
+    doc.setFontSize(18);
+    doc.text('Programação de Férias', 14, yPosition);
+    yPosition += 10;
+    
+    doc.setFontSize(10);
+    doc.text(`Fundo Municipal de Saúde de Itabuna - Emitido em ${new Date().toLocaleDateString('pt-BR')}`, 14, yPosition);
+    yPosition += 15;
+
+    sortedMonths.forEach((monthKey, index) => {
+      const [month, year] = monthKey.split('/');
+      const monthName = MONTH_NAMES[parseInt(month, 10) - 1];
+      
       doc.setFontSize(14);
-      doc.text(`${MONTH_NAMES[parseInt(month, 10) - 1]} ${year}`, 14, y);
-      y += 8;
+      doc.text(`${monthName} ${year}`, 14, yPosition);
+      yPosition += 8;
 
       autoTable(doc, {
-        startY: y,
-        head: [['Matricula', 'Nome', 'Admissao', 'Ferias Vencidas']],
-        body: grouped[key].map((item) => [item.matricula, item.nome, item.admissao, String(item.feriasVencidas)]),
+        startY: yPosition,
+        head: [['Matrícula', 'Nome', 'Admissão', 'Férias Vencidas']],
+        body: grouped[monthKey].map((item) => [item.matricula, item.nome, item.admissao, String(item.feriasVencidas)]),
         theme: 'striped',
         headStyles: { fillColor: [234, 179, 8] },
         styles: { fontSize: 8 },
+        margin: { top: yPosition, left: 14, right: 14 }
       });
 
-      y = (doc as any).lastAutoTable.finalY + 10;
-      if (y > 250) {
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      if (index < sortedMonths.length - 1 && yPosition > 250) {
         doc.addPage();
-        y = 20;
+        yPosition = 20;
       }
     });
 
@@ -383,114 +423,226 @@ const Ferias: React.FC = () => {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
             <span className="material-symbols-outlined text-primary text-3xl md:text-4xl">beach_access</span>
-            Listagem Ferias Vencidas
+            Listagem Férias Vencidas
           </h1>
-          <p className="text-gray-400 mt-1">Dados sincronizados com o Supabase.</p>
+          <p className="text-gray-400 mt-1">
+            Dados sincronizados com o Supabase.
+          </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <button
             onClick={fetchFeriasData}
             disabled={loading || saving}
-            className="flex items-center gap-2 bg-[#1a1a1a] hover:bg-[#222] disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-medium border border-border-dark w-full md:w-auto justify-center"
+            className="flex items-center gap-2 bg-[#1a1a1a] hover:bg-[#222] disabled:opacity-50 text-white px-4 py-2.5 rounded-xl font-medium border border-border-dark transition-all shadow-lg shadow-black/20 active:scale-95 w-full md:w-auto justify-center"
           >
             <span className="material-symbols-outlined">refresh</span>
             Atualizar
           </button>
-          <button
+          <button 
             onClick={openProgramModal}
             disabled={loading || saving}
-            className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl font-medium w-full md:w-auto justify-center"
-          >
+            className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black px-4 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-yellow-500/20 active:scale-95 w-full md:w-auto justify-center">
             <span className="material-symbols-outlined">event_note</span>
-            Programacao
+            Programação
           </button>
         </div>
       </div>
 
+      {/* Cards de Resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5">
-          <p className="text-gray-400 text-sm">Servidores com Ferias Vencidas</p>
-          <p className="text-3xl font-bold text-red-400">{stats.totalVencidas}</p>
+        <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-red-400">warning</span>
+          </div>
+          <div>
+            <p className="text-gray-400 text-sm">Servidores com Férias Vencidas</p>
+            <p className="text-3xl font-bold text-red-400">{stats.totalVencidas}</p>
+          </div>
         </div>
-        <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-5">
-          <p className="text-gray-400 text-sm">Servidores Em Dia</p>
-          <p className="text-3xl font-bold text-green-400">{stats.totalEmDia}</p>
+        <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-green-400">check_circle</span>
+          </div>
+          <div>
+            <p className="text-gray-400 text-sm">Servidores Em Dia</p>
+            <p className="text-3xl font-bold text-green-400">{stats.totalEmDia}</p>
+          </div>
         </div>
-        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-5">
-          <p className="text-gray-400 text-sm">Proximo Vencimento</p>
-          <p className="text-xl font-bold text-yellow-400">{stats.proximoVencimento?.data || '---'}</p>
-          <p className="text-xs text-gray-500 truncate">{stats.proximoVencimento?.nome || ''}</p>
+        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-5 flex items-center gap-4">
+          <div className="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-yellow-400">event_upcoming</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-gray-400 text-sm">Próximo Vencimento</p>
+            {stats.proximoVencimento ? (
+              <>
+                <p className="text-xl font-bold text-yellow-400">{stats.proximoVencimento.data}</p>
+                <p className="text-xs text-gray-500 truncate">{stats.proximoVencimento.nome}</p>
+              </>
+            ) : <p className="text-lg font-bold text-gray-400">---</p>}
+          </div>
         </div>
       </div>
 
-      <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-xl">
+      {/* Tabela de Dados */}
+      <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden flex flex-col shadow-xl">
+        
+        {/* Header e Filtros da Tabela */}
         <div className="p-6 border-b border-border-dark flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface-dark/50">
-          <div>
-            <h2 className="text-lg font-semibold text-white">Servidores sincronizados</h2>
-            <p className="text-sm text-gray-400">Total de {filteredData.length} registros encontrados</p>
+          <div className="flex items-center gap-2">
+            <div className="bg-primary/20 text-primary p-2 rounded-lg">
+              <span className="material-symbols-outlined">list_alt</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Servidores em Férias Vencidas</h2>
+              <p className="text-sm text-gray-400">Total de {filteredData.length} registros encontrados</p>
+            </div>
           </div>
-          <input
-            type="text"
-            placeholder="Buscar por nome ou matricula..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-72 bg-[#111111] border border-border-dark text-white rounded-xl px-4 py-2 focus:outline-none focus:border-primary"
-          />
+          
+          <div className="relative w-full sm:w-72">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">search</span>
+            <input
+              type="text"
+              placeholder="Buscar por nome ou matrícula..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#111111] border border-border-dark text-white rounded-xl pl-10 pr-4 py-2 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-gray-500"
+            />
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
-                <th className="px-4 py-4 font-semibold border-b border-border-dark">Matricula</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark">Nome</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark">Admissao</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center">Adquiridos</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center">Gozadas</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center">Situacao</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center">Prox. Venc.</th>
-                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center">Acoes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-dark">
-              {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-400" colSpan={8}>Carregando dados de ferias...</td>
-                </tr>
-              ) : filteredData.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-400" colSpan={8}>Nenhum servidor encontrado.</td>
-                </tr>
-              ) : filteredData.map((item) => {
-                const info = getInfo(item);
+        {/* Lista Agrupada por Letras (Accordion) */}
+        <div className="p-6 bg-[#0a0a0a]">
+          {loading ? (
+             <div className="py-12 text-center text-gray-400">Carregando dados de férias...</div>
+          ) : groupedData.length > 0 ? (
+            <div className="space-y-4">
+              {groupedData.map((group) => {
+                const isExpanded = expandedLetters.includes(group.letter);
                 return (
-                  <tr key={item.id} className="hover:bg-[#151515] transition-colors">
-                    <td className="px-4 py-4"><span className="font-mono text-gray-300">{item.matricula}</span></td>
-                    <td className="px-4 py-4 text-white font-medium">{item.nome}</td>
-                    <td className="px-4 py-4 text-gray-400">{item.admissao}</td>
-                    <td className="px-4 py-4 text-center text-gray-300">{info.periodosAdquiridos}</td>
-                    <td className="px-4 py-4 text-center text-gray-300">{info.feriasGozadas}</td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-white/5 text-gray-200">{info.status}</span>
-                    </td>
-                    <td className="px-4 py-4 text-center text-gray-400">{info.proximoVencimento}</td>
-                    <td className="px-4 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => setViewServer(item)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                          <span className="material-symbols-outlined text-[20px]">visibility</span>
-                        </button>
-                        {item.programacao && (
-                          <button onClick={() => handleCancelProgramacao(item.programacao.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors">
-                            <span className="material-symbols-outlined text-[20px]">close</span>
-                          </button>
-                        )}
+                  <div key={group.letter} className="bg-[#111111] border border-border-dark rounded-2xl overflow-hidden shadow-lg transition-all">
+                    {/* Cabeçalho do Accordion (Letra) */}
+                    <button 
+                      onClick={() => toggleLetter(group.letter)}
+                      className="w-full flex items-center justify-between p-5 bg-[#151515] hover:bg-white/5 transition-colors focus:outline-none"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-2xl border border-primary/30 shrink-0 shadow-sm">
+                          {group.letter}
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-white font-bold text-xl mb-1">Letra {group.letter}</h3>
+                          <p className="text-gray-400 text-sm font-medium">{group.items.length} Servidor{group.items.length !== 1 ? 'es' : ''}</p>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
+                      <div className={`p-2 rounded-full bg-black/40 border border-white/5 transition-transform duration-300 flex items-center justify-center ${isExpanded ? 'rotate-180 bg-primary/20 text-primary border-primary/30' : 'text-gray-400'}`}>
+                        <span className="material-symbols-outlined">expand_more</span>
+                      </div>
+                    </button>
+                    
+                    {/* Conteúdo do Accordion (Lista de Servidores) */}
+                    {isExpanded && (
+                      <div className="border-t border-border-dark bg-[#0e0e0e] animate-fade-in">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Matrícula</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Nome</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Admissão</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adquiridos</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Gozadas</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Situação</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Próx. Venc.</th>
+                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border-dark">
+                              {group.items.map((item) => {
+                                const info = getInfo(item);
+                                return (
+                                <tr key={item.id} className="hover:bg-[#151515] transition-colors">
+                                  <td className="px-4 py-4 whitespace-nowrap">
+                                    <span className="font-mono text-gray-300 bg-black/40 px-2 py-1.5 rounded border border-white/5 text-sm shadow-inner">{item.matricula}</span>
+                                  </td>
+                                  <td className="px-4 py-4 text-white font-medium whitespace-nowrap">
+                                    {item.nome}
+                                  </td>
+                                  <td className="px-4 py-4 text-gray-400 whitespace-nowrap text-sm">
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-symbols-outlined text-[16px] opacity-70">calendar_month</span>
+                                      {item.admissao}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4 text-gray-300 whitespace-nowrap text-center font-medium">
+                                    {info.periodosAdquiridos}
+                                  </td>
+                                  <td className="px-4 py-4 text-gray-300 whitespace-nowrap text-center font-medium">
+                                    {info.feriasGozadas}
+                                  </td>
+                                  <td className="px-4 py-4 whitespace-nowrap">
+                                    <div className="flex justify-center">
+                                      <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
+                                        item.programacao
+                                          ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                          : info.feriasDisponiveis > 0 
+                                            ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
+                                            : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                      }`}>
+                                        {info.status}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-4 text-gray-400 whitespace-nowrap text-center text-sm font-medium">
+                                    {info.proximoVencimento}
+                                  </td>
+                                  <td className="px-4 py-4 whitespace-nowrap text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => setViewServer(item)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Visualizar">
+                                        <span className="material-symbols-outlined text-[20px]">visibility</span>
+                                      </button>
+                                      {item.programacao && (
+                                        <button onClick={() => handleCancelProgramacao(item.programacao!.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Cancelar Programação">
+                                          <span className="material-symbols-outlined text-[20px]">close</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-gray-400">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <span className="material-symbols-outlined text-4xl opacity-50">search_off</span>
+                <p>Nenhum servidor encontrado para "{searchTerm}"</p>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Footer da Tabela */}
+        <div className="px-6 py-4 border-t border-border-dark bg-[#111111] flex items-center justify-between">
+          <span className="text-sm text-gray-400">
+            Mostrando 1 a {filteredData.length} de {data.length} resultados
+          </span>
+          <div className="flex gap-2">
+            <button className="px-3 py-1.5 rounded-lg border border-border-dark text-gray-400 hover:text-white hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm" disabled>
+              Anterior
+            </button>
+            <button className="px-3 py-1.5 rounded-lg border border-border-dark text-gray-400 hover:text-white hover:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm" disabled>
+              Próxima
+            </button>
+          </div>
         </div>
       </div>
 
@@ -508,12 +660,13 @@ const Ferias: React.FC = () => {
                 const info = getInfo(viewServer);
                 return (
                   <>
-                    <div className="flex justify-between"><span className="text-gray-400">Matricula</span><span className="text-white">{viewServer.matricula}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Admissao</span><span className="text-white">{viewServer.admissao}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Periodos Adquiridos</span><span className="text-white">{info.periodosAdquiridos}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Ferias Gozadas</span><span className="text-white">{info.feriasGozadas}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Prox. Vencimento</span><span className="text-white">{info.proximoVencimento}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Situacao</span><span className="text-white">{info.status}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Matrícula</span><span className="text-white">{viewServer.matricula}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Admissão</span><span className="text-white">{viewServer.admissao}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Períodos Adquiridos</span><span className="text-white">{info.periodosAdquiridos}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Férias Gozadas</span><span className="text-white">{info.feriasGozadas}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Férias Vencidas</span><span className="text-white">{info.feriasDisponiveis}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Próx. Vencimento</span><span className="text-white">{info.proximoVencimento}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Situação</span><span className="text-white">{info.status}</span></div>
                   </>
                 );
               })()}
@@ -526,7 +679,7 @@ const Ferias: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={() => setIsProgramModalOpen(false)}>
           <div className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-border-dark flex items-center justify-between">
-              <h3 className="text-base font-bold text-white">Programacao de Ferias</h3>
+              <h3 className="text-base font-bold text-white">Programação de Férias</h3>
               <button onClick={() => setIsProgramModalOpen(false)} className="text-gray-400 hover:text-white">
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -564,7 +717,7 @@ const Ferias: React.FC = () => {
                         <li key={item.id} className="flex items-center gap-2 px-3 py-2">
                           <input
                             type="checkbox"
-                            className="accent-yellow-500 w-3.5 h-3.5"
+                            className="accent-yellow-500 w-3.5 h-3.5 cursor-pointer shrink-0"
                             checked={selection.selected}
                             onChange={(e) => setProgramSelections((prev) => ({ ...prev, [item.id]: { ...prev[item.id], selected: e.target.checked } }))}
                           />
@@ -577,7 +730,7 @@ const Ferias: React.FC = () => {
                             onChange={(e) => setProgramSelections((prev) => ({ ...prev, [item.id]: { ...prev[item.id], month: e.target.value, selected: true } }))}
                             className="w-[110px] bg-[#1A1A1A] border border-border-dark text-white rounded-md px-2 py-1 text-[11px]"
                           >
-                            <option value="">Mes...</option>
+                            <option value="">Mês...</option>
                             <option value="01">Jan</option>
                             <option value="02">Fev</option>
                             <option value="03">Mar</option>
@@ -596,7 +749,7 @@ const Ferias: React.FC = () => {
                     })}
                   </ul>
                 ) : (
-                  <div className="py-10 px-4 text-center text-gray-500 text-xs">Nenhum servidor pendente de programacao.</div>
+                  <div className="py-10 px-4 text-center text-gray-500 text-xs">Nenhum servidor pendente de programação.</div>
                 )
               )}
             </div>
@@ -606,11 +759,11 @@ const Ferias: React.FC = () => {
                 <button
                   onClick={handleProgramMultipleSave}
                   disabled={saving || (Object.values(programSelections) as ProgramSelection[]).filter((item) => item.selected && item.month).length === 0}
-                  className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-black py-2 rounded-lg text-xs font-bold"
+                  className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-black py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-yellow-500/20 active:scale-95"
                 >
                   Programar
                 </button>
-                <button onClick={handleExportPDF} disabled={servidoresProgramados.length === 0} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-2 rounded-lg text-xs font-bold">Exportar PDF</button>
+                <button onClick={handleExportPDF} disabled={servidoresProgramados.length === 0} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-2 rounded-lg text-xs font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95">Exportar PDF</button>
               </div>
             </div>
           </div>
