@@ -1,0 +1,423 @@
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Ordem: Alfabética
+Matrícula: Nome: Admissão Férias Vencidas
+ADEILMA DA SILVA SANTOS REIS	00737001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ADELSON NASCIMENTO DOS SANTOS	01311001 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ADRIANA SILVA SANTOS	00738001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+AIONA PEREIRA SANTOS	01310601 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ALANA BARRETO BRAGA	01310301 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ALBERTO CESAR ARAUJO DOS SANTOS	01311401 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ALESSANDRO DE OLIVEIRA MORENO	00559702 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ALEX SILVA CARVALHO	00349003 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ALEXSANDRO SANTOS SODRE	00686102 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ALINE DE JESUS SANTOS	00742601 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+AMANDA SILVA VIANA	01624201 1	11/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+ANA BARROS SAMPAIO NETA	00868802 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+ANA CRISTINA DA SILVA SANTOS	01310801 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ANDERSON GONCALVES DOS SANTOS	00740001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ANDRE FREITAS RAEDER	00573502 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ANDRE SALES CURVELO	00740601 0	07/07/2008
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	1 / 10
+
+-- 1 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Matrícula: Nome: Admissão Férias Vencidas
+ANTONIO CARDOSO LIMA	00583202 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+APARECIDA DE JESUS BRANDAO	00570002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ARLENE PAZ DE ALMEIDA OLIVEIRA	00582802 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CARLA AYESCA SILVA BARBOSA	00734601 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CARLOS ALBERTO DIAS ALVES	00498502 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CARLOS ALBERTO SILVA SANTOS	00739101 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CARLOS ALEXANDRE LIMA REIS	00739501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CARLOS ANTONIO OLIVEIRA	00621602 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CATIA CRISTINA SANTOS CALAZANS	00734101 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CELIO ROBERTO CAROBA	01309801 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+CINTIA DE OLIVEIRA	00558402 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLAUDINEI SANTOS NASCIMENTO	01310001 1	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+CLAUDINEIDE PEREIRA CHAVES MACIEL
+SANTOS
+00737601 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLAUDIO SOUSA VIEIRA	00739601 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLEITON MATOS PEDREIRA	00735301 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLEUDES SOUSA FERREIRA	00558502 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	2 / 10
+
+-- 2 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+CLEUDY FRANCO NUNES FARIAS	00741401 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLEVERSON ANDRADE PINHO	00735501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CLODOALDO SANTOS DE OLIVEIRA	00735901 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CREMILDA DA CRUZ DE MORAIS	00736301 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+CRISTIANE VIEIRA DE OLIVEIRA	01309901 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+DAIANE MARIA SANTOS	00737201 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DANIEL MACEDO DOS SANTOS FILHO	00737901 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DANILO ALMEIDA FONSECA SANTOS	00558602 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DANILO SILVA DE OLIVEIRA	00574502 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DANYELE DOS SANTOS DIAS	00741501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DAVIDSON ARAUJO SANTOS	00346303 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+DIEGO SOUZA SANTOS	00738401 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DJENANE DA SILVA FERREIRA	00574902 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+DORIVAL SOUSA DIAS	00575002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+EDILEUSA GOMES DOS SANTOS	00459803 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+EDLA CARLA POLVORA DO NASCIMENTO	00580402 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+EDNA SILVA DOS SANTOS	00575302 0	07/07/2008
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	3 / 10
+
+-- 3 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Matrícula: Nome: Admissão Férias Vencidas
+EILTON OLIVEIRA DA SILVA	01309501 1	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ELIENE DA SILVA CERQUEIRA	00735801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ELIETE DO CARMO MELO	01472901 0	03/07/2017
+Matrícula: Nome: Admissão Férias Vencidas
+ELINEIDE REIS SANTOS	01625901 1	23/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+ELIOJENES SOUTO DOS SANTOS	01309401 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ELISANGELA DA SILVA ARAUJO	00498302 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ELISSANDRO SANTOS DE OLIVEIRA	00869502 1	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+ERIKSON MARIO SOUZA	00575602 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ERIVALDO DE SOUZA SILVA	00649003 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+ESDRAS SANTOS AGUIAR NOVAIS	00582402 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ESTELITA VIANA SILVA	00575702 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+FAGNER NASCIMENTO DA SILVA	01541201 1	02/05/2018
+Matrícula: Nome: Admissão Férias Vencidas
+FLAVIO SANTOS MODESTO DA COSTA	00576302 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+FRANCISCO APOLINARIO DA SILVA NETO	00620902 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+FRANCISLEI ALVES LIMA	00741001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GEANE SOARES DOS SANTOS	00870202 1	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	4 / 10
+
+-- 4 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+GILDASIO SILVA	00592902 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GILDETE FERREIRA DOS SANTOS SALES	00741201 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GILMARA SANTOS OLIVEIRA SETENTA	00741701 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GILSON DE OLIVEIRA PIRES	01626401 2	08/05/2019
+Matrícula: Nome: Admissão Férias Vencidas
+GILVAN NASCIMENTO DE ALMEIDA	00741801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GISELE SILVA DE CASTRO	01626501 1	02/05/2019
+Matrícula: Nome: Admissão Férias Vencidas
+GIVALDO EUZEBIO SANTOS	00738201 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GLEICE DOS SANTOS COUTINHO	00571002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+GLICIA OLIVEIRA FERREIRA DAS VIRGENS	00580802 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+HERALDO VIEIRA MOREIRA	00736501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+HERVALDO OLIVEIRA DE CARVALHO	00869602 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+ILZANETE NUNES NORONHA	00582202 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+IRANILSON BARBOSA DA CRUZ	00737101 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ISABELLA ALVES DA SILVA	01624001 1	15/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+ISRAEL SILVA BATISTA	00637202 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ISRAEL VIEIRA SENA	00574102 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JACKSON OLIVEIRA SANTOS	01308401 1	15/08/2016
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	5 / 10
+
+-- 5 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Matrícula: Nome: Admissão Férias Vencidas
+JADSON GOMES DE OLIVEIRA	00578002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JAIR FONSECA FONTES	00577902 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JAIR SILVA SANTOS	00643702 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JAMILLE BARRETO ROSA	00734201 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JEAN GENTIL SANTOS RAMOS	00570802 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JEFERSON SANTOS DA ROCHA	01308101 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+JEFFERSON BARROS DA SILVA	01308201 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+JESSE CARVALHO SOUSA	00735701 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOAO PAULO FIGUEIREDO DE CARVALHO	00738901 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOELISSON FERREIRA DE SOUZA	01308301 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+JOELMA BARBOSA DE SOUZA	00734301 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JORGE OLIVEIRA SANTOS	00570602 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE MARCIO DIAS OLIVEIRA	00734801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE OLIVEIRA DOS SANTOS	00570502 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE PEREIRA COSTA JUNIOR	01307801 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE REINAN GOMES DOS SANTOS
+JUNIOR
+01307901 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	6 / 10
+
+-- 6 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+JOSE ROBERTO NASCIMENTO SANTOS	00634602 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE ROBERTO PEREIRA GOES	00617402 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSE VILSON DIAS ARAGAO	01624701 1	10/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+JOSEFA DA CRUZ DE MORAIS	00736401 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+JOSENALDO MENDES DOS SANTOS	00616502 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+KADU SILVA CAVALCANTE	01309601 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+LELIA FRANCA VIEIRA	00734401 2	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LEONARDO RODRIGUES DOS SANTOS	01546201 0	05/09/2018
+Matrícula: Nome: Admissão Férias Vencidas
+LICIA SANTOS NASCIMENTO	00868702 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+LINDIVAL LOPES GOMES	00742701 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LINDOMAR PEREIRA SANTOS	00581302 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LUANA PRISCILLA BERTHOLDO DOS
+SANTOS
+01623501 0	15/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+LUCIANA SANTOS DO CARMO	00734001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LUCIMAR CRUZ SANTOS	00489502 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LUCIMAR SANTOS RIBEIRO	00581502 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+LUIS RICARDO HORA ADERNE	01307701 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+LUIZ PAULO PELLEGRINI FERREIRA	00659602 0	07/07/2008
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	7 / 10
+
+-- 7 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Matrícula: Nome: Admissão Férias Vencidas
+MADSON SANTOS SODRE	00742501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MARCELO VIEIRA MOREIRA	01306901 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+MARCOS ANTONIO ALVARENGA	01307201 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+MARCUS VINICIUS BRITO COSTA	01307001 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+MARIA AVANEIDE ALMEIDA SANTOS	00735201 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MARIA DAS GRACAS FELIX DOS SANTOS	00733801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MARIA MARGARETH BARRETO	00738801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MARILENE NUNES DOS SANTOS	00581002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MARY LUCY SILVA SANTOS	00571702 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+MOISES CARDOSO DANTAS	00622802 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+NATALY NASCIMENTO MARTINS	01472701 0	03/07/2017
+Matrícula: Nome: Admissão Férias Vencidas
+PATRICIA MARCAL DE JESUS	00740901 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+PATRICIO ALVES MOREIRA	00737801 3	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+PAULO HENRIQUE SOUSA TEIXEIRA	00740201 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+PAULO VITOR OLIVEIRA BARRETO	00677502 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+POLLYANA ASSUNCAO SANTOS	01628601 0	13/05/2019
+Matrícula: Nome: Admissão Férias Vencidas
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	8 / 10
+
+-- 8 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+RAFAEL SIMOES PADILHA	01306101 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+RAILDA DE JESUS PORFIRIO	00741101 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+REGINA SILVA DOS SANTOS	00868002 1	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+RENATO SEIXAS VIEIRA	01305901 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+RENIVALDA DOS SANTOS SOUZA	00740501 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+RILDO BARROS DE MENEZES	00579202 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+RITA DE CASSIA BISPO DOS SANTOS	01626601 0	02/05/2019
+Matrícula: Nome: Admissão Férias Vencidas
+RITA DE CASSIA SOUZA DE OLIVEIRA	00738701 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+RITA SOUSA CARDOSO DE OLIVEIRA	00739401 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ROBERIO DOS SANTOS MAIA	00579102 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ROMULO BEHRMANN DA SILVA	01305801 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+ROSIMARA ALVES DE JESUS	00736901 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ROSIVALDO DIAS DA SILVA	00578802 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ROSIVALDO SANTOS DANTAS	00578702 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+RUTE FRANCISCA DOS SANTOS
+GONCALVES
+00735601 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+SILAS GOIS SILVA	01628101 1	25/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+SILVAN DOS SANTOS ALMEIDA	01305501 0	15/08/2016
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	9 / 10
+
+-- 9 of 10 --
+
+PREFEITURA MUNICIPAL DE ITABUNA
+FUNDO MUNICIPAL DE SAUDE DE ITABUNA
+Governo do Estado do BAHIA
+Listagem Ferias Vencidas ( 00460 )
+12/06/2026 09:38:24
+Matrícula: Nome: Admissão Férias Vencidas
+SILVIA DE MENEZES ALVES ESTRELA	00489102 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+STHEFANNY JULIANY NASCIMENTO SILVA	01305401 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+TELMA MARIA MACEDO OLIVEIRA	00458902 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+TONY ROGERIO RODRIGUES	01305301 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+VALDIRENE DOS SANTOS FERNANDES	00869302 0	20/11/2009
+Matrícula: Nome: Admissão Férias Vencidas
+VANESSA APARECIDA SILVA ARAUJO	01624501 1	11/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+VANEUSA FERREIRA DOS SANTOS	00558302 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+VANUSA SANTOS DA SILVA	00593002 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+VERONICA COSTA VIDAL	00740801 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+VITOR LAYTYNHER VARJAO RAMOS	01305201 0	15/08/2016
+Matrícula: Nome: Admissão Férias Vencidas
+WERIK DE ANDRADE DANTAS	00735001 0	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+WILLIAMS JOSE DE OLIVEIRA CRUZ	00736801 1	07/07/2008
+Matrícula: Nome: Admissão Férias Vencidas
+ZILMA PERMINIO DE QUEIROZ CAZAIS	01624801 1	09/04/2019
+Matrícula: Nome: Admissão Férias Vencidas
+ZULEIDE CONCEICAO SANTOS	01305101 0	15/08/2016
+Usuário: REIFFSON ARAUJO MIRANDA Maquina: TS00-EL (172.16.1.166)	10 / 10
+
+-- 10 of 10 --
+

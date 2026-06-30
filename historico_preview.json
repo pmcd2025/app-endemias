@@ -1,8 +1,4 @@
-export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas: number }> = {
-  "622802": {
-    "admissao": "07/07/2008",
-    "feriasVencidas": 0
-  },
+{
   "00737001": {
     "admissao": "07/07/2008",
     "feriasVencidas": 0
@@ -139,7 +135,7 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "admissao": "07/07/2008",
     "feriasVencidas": 0
   },
-  "00449602": {
+  "00558602": {
     "admissao": "07/07/2008",
     "feriasVencidas": 0
   },
@@ -160,11 +156,11 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "feriasVencidas": 0
   },
   "00574902": {
-    "admissao": "07/07/2008",
+    "admissao": "20/11/2009",
     "feriasVencidas": 0
   },
   "00575002": {
-    "admissao": "07/07/2008",
+    "admissao": "20/11/2009",
     "feriasVencidas": 0
   },
   "00459803": {
@@ -175,7 +171,7 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "admissao": "07/07/2008",
     "feriasVencidas": 1
   },
-  "00676302": {
+  "00575302": {
     "admissao": "07/07/2008",
     "feriasVencidas": 0
   },
@@ -203,7 +199,7 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "admissao": "07/07/2008",
     "feriasVencidas": 1
   },
-  "00865502": {
+  "00869502": {
     "admissao": "20/11/2009",
     "feriasVencidas": 1
   },
@@ -483,6 +479,10 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "admissao": "07/07/2008",
     "feriasVencidas": 0
   },
+  "00622802": {
+    "admissao": "07/07/2008",
+    "feriasVencidas": 0
+  },
   "01472701": {
     "admissao": "03/07/2017",
     "feriasVencidas": 0
@@ -619,4 +619,4 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
     "admissao": "15/08/2016",
     "feriasVencidas": 0
   }
-};
+}
