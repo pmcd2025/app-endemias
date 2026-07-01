@@ -609,7 +609,7 @@ export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas
   },
   "00468201": {
     "admissao": "07/07/2008",
-    "feriasVencidas": 0
+    "feriasVencidas": 1
   },
   "01625801": {
     "admissao": "25/04/2019",
