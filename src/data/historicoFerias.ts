@@ -1,4 +1,8 @@
 export const HISTORICO_FERIAS: Record<string, { admissao: string, feriasVencidas: number }> = {
+  "01624801": {
+    "admissao": "09/04/2019",
+    "feriasVencidas": 1
+  },
   "622802": {
     "admissao": "07/07/2008",
     "feriasVencidas": 0
