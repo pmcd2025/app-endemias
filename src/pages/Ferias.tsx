@@ -165,7 +165,7 @@ const Ferias: React.FC = () => {
 
   // Add Server Modal state
   const [isAddServerModalOpen, setIsAddServerModalOpen] = useState(false);
-  const [addServerForm, setAddServerForm] = useState({ matricula: '', nome: '', admissao: '' });
+  const [addServerForm, setAddServerForm] = useState({ matricula: '', nome: '', admissao: '', feriasVencidas: '' });
   const [addServerError, setAddServerError] = useState('');
   const [addServerSaving, setAddServerSaving] = useState(false);
 
@@ -211,6 +211,16 @@ const Ferias: React.FC = () => {
         status: 'active',
       };
 
+      if (addServerForm.feriasVencidas !== '') {
+        const parsed = parseInt(addServerForm.feriasVencidas, 10);
+        if (!isNaN(parsed)) {
+          insertPayload.city = JSON.stringify({
+            override_vencidas: parsed,
+            override_date: new Date().toISOString()
+          });
+        }
+      }
+
       // Associar supervisor baseado no perfil do usuário logado
       if (userProfile) {
         if (userProfile.role === 'supervisor_area') {
@@ -226,7 +236,7 @@ const Ferias: React.FC = () => {
       if (error) throw error;
 
       // Sucesso - limpar formulário e fechar modal
-      setAddServerForm({ matricula: '', nome: '', admissao: '' });
+      setAddServerForm({ matricula: '', nome: '', admissao: '', feriasVencidas: '' });
       setIsAddServerModalOpen(false);
       await fetchFeriasData();
     } catch (error: any) {
@@ -1703,6 +1713,23 @@ const Ferias: React.FC = () => {
                   onChange={(e) => setAddServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
                   className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all [color-scheme:dark]"
                 />
+              </div>
+
+              {/* Férias Vencidas */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-gray-500">history</span>
+                  Quantidade de Férias Vencidas (Saldo Inicial)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={addServerForm.feriasVencidas}
+                  onChange={(e) => setAddServerForm((prev) => ({ ...prev, feriasVencidas: e.target.value }))}
+                  placeholder="Ex: 0"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600"
+                />
+                <p className="text-xs text-gray-500 mt-1">Defina o saldo de férias que o servidor tem hoje (caso já tenha vencidas).</p>
               </div>
             </div>
 
