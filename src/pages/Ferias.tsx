@@ -71,14 +71,13 @@ const getProgramYear = (month: string) => {
   return monthNum < currentMonth ? now.getFullYear() + 1 : now.getFullYear();
 };
 
-const getPeriodosAdquiridos = (admissao: string) => {
+const getPeriodosAdquiridos = (admissao: string, targetDate: Date = new Date()) => {
   const admissaoDate = parseDate(admissao);
   if (isNaN(admissaoDate.getTime())) return 0;
 
-  const currentDate = new Date();
-  let periodos = currentDate.getFullYear() - admissaoDate.getFullYear();
-  const monthDiff = currentDate.getMonth() - admissaoDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && currentDate.getDate() < admissaoDate.getDate())) {
+  let periodos = targetDate.getFullYear() - admissaoDate.getFullYear();
+  const monthDiff = targetDate.getMonth() - admissaoDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && targetDate.getDate() < admissaoDate.getDate())) {
     periodos--;
   }
   return Math.max(0, periodos);
@@ -240,7 +239,7 @@ const Ferias: React.FC = () => {
 
   // Edit Server Modal state
   const [isEditServerModalOpen, setIsEditServerModalOpen] = useState(false);
-  const [editServerForm, setEditServerForm] = useState({ id: '', matricula: '', nome: '', admissao: '' });
+  const [editServerForm, setEditServerForm] = useState({ id: '', matricula: '', nome: '', admissao: '', feriasVencidas: '' });
   const [editServerError, setEditServerError] = useState('');
   const [editServerSaving, setEditServerSaving] = useState(false);
 
@@ -258,6 +257,7 @@ const Ferias: React.FC = () => {
       matricula: item.matricula,
       nome: item.nome,
       admissao: admissaoISO,
+      feriasVencidas: item.feriasVencidas !== undefined ? String(item.feriasVencidas) : '',
     });
     setEditServerError('');
     setIsEditServerModalOpen(true);
@@ -296,13 +296,25 @@ const Ferias: React.FC = () => {
         return;
       }
 
+      const payload: any = {
+        matricula: editServerForm.matricula.trim(),
+        name: editServerForm.nome.trim(),
+        hire_date: editServerForm.admissao,
+      };
+
+      if (editServerForm.feriasVencidas !== '') {
+        const parsed = parseInt(editServerForm.feriasVencidas, 10);
+        if (!isNaN(parsed)) {
+          payload.city = JSON.stringify({
+            override_vencidas: parsed,
+            override_date: new Date().toISOString()
+          });
+        }
+      }
+
       const { error } = await supabase
         .from('servers')
-        .update({
-          matricula: editServerForm.matricula.trim(),
-          name: editServerForm.nome.trim(),
-          hire_date: editServerForm.admissao,
-        } as unknown as never)
+        .update(payload as unknown as never)
         .eq('id', editServerForm.id);
 
       if (error) throw error;
@@ -355,7 +367,7 @@ const Ferias: React.FC = () => {
     try {
       let serversQuery = supabase
         .from('servers')
-        .select('id, matricula, name, hire_date, supervisor_geral_id, supervisor_area_id')
+        .select('id, matricula, name, hire_date, supervisor_geral_id, supervisor_area_id, city')
         .order('name', { ascending: true });
 
       if (userProfile.role === 'supervisor_area') {
@@ -367,7 +379,7 @@ const Ferias: React.FC = () => {
       const { data: serversData, error: serversError } = await (serversQuery as any);
       if (serversError) throw serversError;
 
-      const servers = (serversData || []) as Pick<Server, 'id' | 'matricula' | 'name' | 'hire_date'>[];
+      const servers = (serversData || []) as (Pick<Server, 'id' | 'matricula' | 'name' | 'hire_date'> & { city?: string | null })[];
       if (servers.length === 0) {
         setData([]);
         return;
@@ -405,22 +417,53 @@ const Ferias: React.FC = () => {
         const normalizedMatricula = server.matricula.replace(/[-_]/g, '');
         const historico = HISTORICO_FERIAS[normalizedMatricula] || HISTORICO_FERIAS[server.matricula];
 
-        let historicalConsumed = 0;
-        if (historico && hireDate) {
-          // Na época da migração, quantas férias o servidor já havia gozado?
-          const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'));
-          historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
+        let calculatedVencidas = 0;
+        let calculatedGozadas = 0;
+
+        let hasOverride = false;
+        if (server.city && server.city.startsWith('{')) {
+          try {
+            const meta = JSON.parse(server.city);
+            if (meta && typeof meta.override_vencidas === 'number' && meta.override_date) {
+              hasOverride = true;
+              const overrideDate = new Date(meta.override_date);
+              
+              const periodosAteOverride = getPeriodosAdquiridos(hireDate, overrideDate);
+              const novosPeriodosAdquiridos = Math.max(0, periodosAdquiridos - periodosAteOverride);
+              
+              const consumidosAposOverride = vacations.filter((v) => {
+                const start = parseDate(v.period_start);
+                return start > overrideDate && start <= now;
+              }).length;
+
+              calculatedVencidas = Math.max(0, meta.override_vencidas + novosPeriodosAdquiridos - consumidosAposOverride);
+              calculatedGozadas = Math.min(periodosAdquiridos, periodosAdquiridos - calculatedVencidas);
+            }
+          } catch (e) {
+            // Ignorar erro de parse JSON
+          }
         }
 
-        const totalConsumed = consumedCount + historicalConsumed;
+        if (!hasOverride) {
+          let historicalConsumed = 0;
+          if (historico && hireDate) {
+            // Na época da migração, quantas férias o servidor já havia gozado?
+            const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'));
+            historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
+          }
+
+          const totalConsumed = consumedCount + historicalConsumed;
+          calculatedVencidas = Math.max(0, periodosAdquiridos - totalConsumed);
+          calculatedGozadas = Math.min(periodosAdquiridos, totalConsumed);
+        }
 
         return {
           id: server.id,
           matricula: server.matricula,
           nome: server.name,
           admissao: hireDate ? formatDate(parseDate(hireDate)) : '-',
-          feriasVencidas: Math.max(0, periodosAdquiridos - totalConsumed),
-          feriasGozadas: Math.min(periodosAdquiridos, totalConsumed),
+          feriasVencidas: calculatedVencidas,
+          feriasGozadas: calculatedGozadas,
           programacao: futureVacation ? mapProgramacao(futureVacation) : null,
           feriasAtuais: activeVacation ? mapProgramacao(activeVacation) : null,
         };
@@ -1770,6 +1813,23 @@ const Ferias: React.FC = () => {
                   onChange={(e) => setEditServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
                   className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [color-scheme:dark]"
                 />
+              </div>
+
+              {/* Férias Vencidas */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[16px] text-gray-500">history</span>
+                  Quantidade de Férias Vencidas (Saldo)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={editServerForm.feriasVencidas}
+                  onChange={(e) => setEditServerForm((prev) => ({ ...prev, feriasVencidas: e.target.value }))}
+                  placeholder="Ex: 1"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600"
+                />
+                <p className="text-xs text-gray-500 mt-1">Ao preencher, este saldo substituirá o histórico antigo e será a nova base de cálculo.</p>
               </div>
             </div>
 
