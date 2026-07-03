@@ -134,10 +134,12 @@ const RelatorioFerias: React.FC = () => {
         const historico = HISTORICO_FERIAS[normalizedMatricula] || HISTORICO_FERIAS[server.matricula];
         let historicalConsumed = 0;
         if (historico && hireDate) {
-          // A data base de extração dos dados legados foi fixada no início de 2025.
-          const dataMigracao = new Date('2025-01-01T12:00:00');
+          // A extração dos dados legados ocorreu em meados de 2026.
+          const dataMigracao = new Date('2026-06-01T12:00:00');
           const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'), dataMigracao);
-          historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
+          // O JSON contém as férias VENCIDAS. Como o servidor sempre tem 1 período em concessão (não vencido),
+          // o saldo real na época era (Vencidas + 1). Logo, Consumidas = Adquiridas - (Vencidas + 1).
+          historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas - 1);
         }
 
         const totalConsumed = consumedCount + historicalConsumed;
