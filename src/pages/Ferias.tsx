@@ -328,6 +328,16 @@ const Ferias: React.FC = () => {
 
       if (error) throw error;
 
+      // Keep the accordion expanded for the edited server's letter
+      const editedName = editServerForm.nome.trim();
+      const editedLetter = editedName.charAt(0).toUpperCase();
+      setExpandedLetters(prev => {
+        if (!prev.includes(editedLetter)) {
+          return [...prev, editedLetter];
+        }
+        return prev;
+      });
+
       setIsEditServerModalOpen(false);
       await fetchFeriasData();
     } catch (error: any) {
@@ -344,6 +354,9 @@ const Ferias: React.FC = () => {
     );
     if (!confirmed) return;
 
+    // Keep accordion expanded for this letter
+    const serverLetter = item.nome.charAt(0).toUpperCase();
+
     setSaving(true);
     try {
       // Delete associated vacations first
@@ -359,6 +372,14 @@ const Ferias: React.FC = () => {
         .delete()
         .eq('id', item.id);
       if (error) throw error;
+
+      // Keep the accordion letter expanded
+      setExpandedLetters(prev => {
+        if (!prev.includes(serverLetter)) {
+          return [...prev, serverLetter];
+        }
+        return prev;
+      });
 
       await fetchFeriasData();
     } catch (error: any) {
@@ -1027,82 +1048,150 @@ const Ferias: React.FC = () => {
                     {/* Conteúdo do Accordion (Lista de Servidores) */}
                     {isExpanded && (
                       <div className="border-t border-border-dark bg-[#0e0e0e] animate-fade-in">
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Matrícula</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Nome</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark whitespace-nowrap">Admissão</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adquiridos</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Gozadas</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Situação</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Próx. Venc.</th>
-                                <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Ações</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border-dark">
-                              {group.items.map((item) => {
-                                const info = getInfo(item);
-                                return (
-                                <tr key={item.id} className="hover:bg-[#151515] transition-colors">
-                                  <td className="px-4 py-4 whitespace-nowrap">
-                                    <span className="font-mono text-gray-300 bg-black/40 px-2 py-1.5 rounded border border-white/5 text-sm shadow-inner">{item.matricula}</span>
-                                  </td>
-                                  <td className="px-4 py-4 text-white font-medium whitespace-nowrap">
-                                    {item.nome}
-                                  </td>
-                                  <td className="px-4 py-4 text-gray-400 whitespace-nowrap text-sm">
-                                    <div className="flex items-center gap-2">
-                                      <span className="material-symbols-outlined text-[16px] opacity-70">calendar_month</span>
-                                      {item.admissao}
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-4 text-gray-300 whitespace-nowrap text-center font-medium">
-                                    {info.periodosAdquiridos}
-                                  </td>
-                                  <td className="px-4 py-4 text-gray-300 whitespace-nowrap text-center font-medium">
-                                    {info.feriasGozadas}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap">
-                                    <div className="flex justify-center">
-                                      <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
-                                        item.programacao
-                                          ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                                          : info.feriasDisponiveis > 0 
-                                            ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                                            : 'bg-green-500/10 text-green-400 border border-green-500/20'
-                                      }`}>
-                                        {info.status}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-4 text-gray-400 whitespace-nowrap text-center text-sm font-medium">
-                                    {info.proximoVencimento}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button onClick={() => setViewServer(item)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Visualizar">
-                                        <span className="material-symbols-outlined text-[20px]">visibility</span>
-                                      </button>
-                                      <button onClick={() => openEditServerModal(item)} className="p-2 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Editar">
-                                        <span className="material-symbols-outlined text-[20px]">edit</span>
-                                      </button>
-                                      <button onClick={() => handleDeleteServer(item)} disabled={saving} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-50" title="Excluir">
-                                        <span className="material-symbols-outlined text-[20px]">delete</span>
-                                      </button>
-                                      {item.programacao && (
-                                        <button onClick={() => handleCancelProgramacao(item.programacao!.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Cancelar Programação">
-                                          <span className="material-symbols-outlined text-[20px]">event_busy</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </td>
+                        {/* Desktop: Tabela compacta com ações sticky */}
+                        <div className="hidden md:block relative">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-0">
+                              <thead>
+                                <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark whitespace-nowrap">Matrícula</th>
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark">Nome</th>
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark whitespace-nowrap">Admissão</th>
+                                  <th className="px-2 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adq.</th>
+                                  <th className="px-2 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Goz.</th>
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Situação</th>
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Próx. Venc.</th>
+                                  <th className="px-3 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap sticky right-0 bg-[#111111] z-10 shadow-[-8px_0_12px_-4px_rgba(0,0,0,0.5)]">Ações</th>
                                 </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-border-dark">
+                                {group.items.map((item) => {
+                                  const info = getInfo(item);
+                                  return (
+                                  <tr key={item.id} className="hover:bg-[#151515] transition-colors group/row">
+                                    <td className="px-3 py-3 whitespace-nowrap">
+                                      <span className="font-mono text-gray-300 bg-black/40 px-1.5 py-1 rounded border border-white/5 text-xs shadow-inner">{item.matricula}</span>
+                                    </td>
+                                    <td className="px-3 py-3 text-white font-medium text-sm max-w-[200px] truncate">
+                                      {item.nome}
+                                    </td>
+                                    <td className="px-3 py-3 text-gray-400 whitespace-nowrap text-xs">
+                                      {item.admissao}
+                                    </td>
+                                    <td className="px-2 py-3 text-gray-300 whitespace-nowrap text-center text-sm font-medium">
+                                      {info.periodosAdquiridos}
+                                    </td>
+                                    <td className="px-2 py-3 text-gray-300 whitespace-nowrap text-center text-sm font-medium">
+                                      {info.feriasGozadas}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap">
+                                      <div className="flex justify-center">
+                                        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                                          item.programacao
+                                            ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                            : info.feriasDisponiveis > 0 
+                                              ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
+                                              : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                        }`}>
+                                          {info.status}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-3 text-gray-400 whitespace-nowrap text-center text-xs font-medium">
+                                      {info.proximoVencimento}
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-center sticky right-0 bg-[#0e0e0e] group-hover/row:bg-[#151515] z-10 shadow-[-8px_0_12px_-4px_rgba(0,0,0,0.5)] transition-colors">
+                                      <div className="flex items-center justify-center gap-0.5">
+                                        <button onClick={() => setViewServer(item)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Visualizar">
+                                          <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                        </button>
+                                        <button onClick={() => openEditServerModal(item)} className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Editar">
+                                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                                        </button>
+                                        <button onClick={() => handleDeleteServer(item)} disabled={saving} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-50" title="Excluir">
+                                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                                        </button>
+                                        {item.programacao && (
+                                          <button onClick={() => handleCancelProgramacao(item.programacao!.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Cancelar Programação">
+                                            <span className="material-symbols-outlined text-[18px]">event_busy</span>
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Mobile: Cards responsivos */}
+                        <div className="md:hidden divide-y divide-border-dark">
+                          {group.items.map((item) => {
+                            const info = getInfo(item);
+                            return (
+                              <div key={item.id} className="p-4 hover:bg-[#151515] transition-colors">
+                                {/* Cabeçalho do card: nome + matrícula */}
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-white font-semibold text-sm truncate">{item.nome}</p>
+                                    <span className="font-mono text-gray-400 bg-black/40 px-1.5 py-0.5 rounded border border-white/5 text-xs shadow-inner inline-block mt-1">{item.matricula}</span>
+                                  </div>
+                                  <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] font-bold shrink-0 ${
+                                    item.programacao
+                                      ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
+                                      : info.feriasDisponiveis > 0 
+                                        ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
+                                        : 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                  }`}>
+                                    {info.status}
+                                  </span>
+                                </div>
+
+                                {/* Info grid */}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mb-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500">Admissão:</span>
+                                    <span className="text-gray-300">{item.admissao}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500">Próx. Venc.:</span>
+                                    <span className="text-gray-300">{info.proximoVencimento}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500">Adquiridos:</span>
+                                    <span className="text-gray-300 font-medium">{info.periodosAdquiridos}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500">Gozadas:</span>
+                                    <span className="text-gray-300 font-medium">{info.feriasGozadas}</span>
+                                  </div>
+                                </div>
+
+                                {/* Botões de ação (sempre visíveis no mobile) */}
+                                <div className="flex items-center gap-1 pt-2 border-t border-border-dark/50">
+                                  <button onClick={() => setViewServer(item)} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-xs">
+                                    <span className="material-symbols-outlined text-[16px]">visibility</span>
+                                    Ver
+                                  </button>
+                                  <button onClick={() => openEditServerModal(item)} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors text-xs">
+                                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                                    Editar
+                                  </button>
+                                  <button onClick={() => handleDeleteServer(item)} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors disabled:opacity-50 text-xs">
+                                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                                    Excluir
+                                  </button>
+                                  {item.programacao && (
+                                    <button onClick={() => handleCancelProgramacao(item.programacao!.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors text-xs ml-auto">
+                                      <span className="material-symbols-outlined text-[16px]">event_busy</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1644,56 +1733,70 @@ const Ferias: React.FC = () => {
 
       {/* Modal Adicionar Servidor */}
       {isAddServerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddServerModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsAddServerModalOpen(false)}>
           <div
-            className="bg-[#111111] border border-border-dark rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
+            className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl overflow-hidden max-h-[90vh] sm:max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-6 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-emerald-500/10 to-transparent">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-emerald-400">person_add</span>
+            <div className="px-4 py-3 sm:p-5 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-emerald-500/10 to-transparent shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-emerald-400 text-[20px] sm:text-[24px]">person_add</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Adicionar Servidor</h3>
-                  <p className="text-xs text-gray-500">Cadastrar novo servidor para verificação de férias</p>
+                  <h3 className="text-base sm:text-lg font-bold text-white">Adicionar Servidor</h3>
+                  <p className="text-[11px] sm:text-xs text-gray-500">Cadastrar novo servidor para verificação de férias</p>
                 </div>
               </div>
-              <button onClick={() => setIsAddServerModalOpen(false)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                <span className="material-symbols-outlined">close</span>
+              <button onClick={() => setIsAddServerModalOpen(false)} className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                <span className="material-symbols-outlined text-[20px] sm:text-[24px]">close</span>
               </button>
             </div>
 
             {/* Formulário */}
-            <div className="p-6 space-y-5 bg-[#0e0e0e]">
+            <div className="p-4 sm:p-5 space-y-4 bg-[#0e0e0e] overflow-y-auto flex-1">
               {addServerError && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                  <span className="material-symbols-outlined text-[18px]">error</span>
+                <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs sm:text-sm">
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">error</span>
                   {addServerError}
                 </div>
               )}
 
-              {/* Matrícula */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">badge</span>
-                  Matrícula
-                </label>
-                <input
-                  type="text"
-                  value={addServerForm.matricula}
-                  onChange={(e) => setAddServerForm((prev) => ({ ...prev, matricula: e.target.value }))}
-                  placeholder="Ex: 12345"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600 font-mono"
-                  autoFocus
-                />
+              {/* Matrícula + Admissão em grid no desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">badge</span>
+                    Matrícula
+                  </label>
+                  <input
+                    type="text"
+                    value={addServerForm.matricula}
+                    onChange={(e) => setAddServerForm((prev) => ({ ...prev, matricula: e.target.value }))}
+                    placeholder="Ex: 12345"
+                    className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600 font-mono"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">calendar_month</span>
+                    Data de Admissão
+                  </label>
+                  <input
+                    type="date"
+                    value={addServerForm.admissao}
+                    onChange={(e) => setAddServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
+                    className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all [color-scheme:dark]"
+                  />
+                </div>
               </div>
 
               {/* Nome do Servidor */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">person</span>
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">person</span>
                   Nome do Servidor
                 </label>
                 <input
@@ -1701,29 +1804,15 @@ const Ferias: React.FC = () => {
                   value={addServerForm.nome}
                   onChange={(e) => setAddServerForm((prev) => ({ ...prev, nome: e.target.value }))}
                   placeholder="Nome completo do servidor"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600"
-                />
-              </div>
-
-              {/* Admissão */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">calendar_month</span>
-                  Data de Admissão
-                </label>
-                <input
-                  type="date"
-                  value={addServerForm.admissao}
-                  onChange={(e) => setAddServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all [color-scheme:dark]"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600"
                 />
               </div>
 
               {/* Férias Vencidas */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">history</span>
-                  Quantidade de Férias Vencidas (Saldo Inicial)
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">history</span>
+                  Férias Vencidas (Saldo Inicial)
                 </label>
                 <input
                   type="number"
@@ -1731,28 +1820,28 @@ const Ferias: React.FC = () => {
                   value={addServerForm.feriasVencidas}
                   onChange={(e) => setAddServerForm((prev) => ({ ...prev, feriasVencidas: e.target.value }))}
                   placeholder="Ex: 0"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-gray-600"
                 />
-                <p className="text-xs text-gray-500 mt-1">Defina o saldo de férias que o servidor tem hoje (caso já tenha vencidas).</p>
+                <p className="text-[11px] text-gray-500">Saldo de férias que o servidor tem hoje (caso já tenha vencidas).</p>
               </div>
             </div>
 
             {/* Footer / Botões */}
-            <div className="px-6 py-4 border-t border-border-dark bg-[#0a0a0a] flex gap-3">
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-t border-border-dark bg-[#0a0a0a] flex gap-2.5 shrink-0">
               <button
                 onClick={() => setIsAddServerModalOpen(false)}
-                className="flex-1 py-3 rounded-xl text-sm font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
+                className="flex-1 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleAddServerSave}
                 disabled={addServerSaving}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2"
               >
                 {addServerSaving ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -1760,7 +1849,7 @@ const Ferias: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <span className="material-symbols-outlined text-[18px]">save</span>
+                    <span className="material-symbols-outlined text-[16px] sm:text-[18px]">save</span>
                     Salvar Servidor
                   </>
                 )}
@@ -1772,55 +1861,69 @@ const Ferias: React.FC = () => {
 
       {/* Modal Editar Servidor */}
       {isEditServerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsEditServerModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setIsEditServerModalOpen(false)}>
           <div
-            className="bg-[#111111] border border-border-dark rounded-2xl w-full max-w-md shadow-2xl overflow-hidden"
+            className="bg-[#111111] border border-border-dark rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl overflow-hidden max-h-[90vh] sm:max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="p-6 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-transparent">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-blue-400">edit</span>
+            <div className="px-4 py-3 sm:p-5 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-transparent shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-blue-400 text-[20px] sm:text-[24px]">edit</span>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Editar Servidor</h3>
-                  <p className="text-xs text-gray-500">Alterar dados do servidor</p>
+                <div className="min-w-0">
+                  <h3 className="text-base sm:text-lg font-bold text-white">Editar Servidor</h3>
+                  <p className="text-[11px] sm:text-xs text-gray-500 truncate">{editServerForm.nome || 'Alterar dados do servidor'}</p>
                 </div>
               </div>
-              <button onClick={() => setIsEditServerModalOpen(false)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
-                <span className="material-symbols-outlined">close</span>
+              <button onClick={() => setIsEditServerModalOpen(false)} className="p-1.5 sm:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors shrink-0">
+                <span className="material-symbols-outlined text-[20px] sm:text-[24px]">close</span>
               </button>
             </div>
 
             {/* Formulário */}
-            <div className="p-6 space-y-5 bg-[#0e0e0e]">
+            <div className="p-4 sm:p-5 space-y-4 bg-[#0e0e0e] overflow-y-auto flex-1">
               {editServerError && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                  <span className="material-symbols-outlined text-[18px]">error</span>
+                <div className="flex items-center gap-2 p-2.5 sm:p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs sm:text-sm">
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">error</span>
                   {editServerError}
                 </div>
               )}
 
-              {/* Matrícula */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">badge</span>
-                  Matrícula
-                </label>
-                <input
-                  type="text"
-                  value={editServerForm.matricula}
-                  onChange={(e) => setEditServerForm((prev) => ({ ...prev, matricula: e.target.value }))}
-                  placeholder="Ex: 12345"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600 font-mono"
-                />
+              {/* Matrícula + Admissão em grid no desktop */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">badge</span>
+                    Matrícula
+                  </label>
+                  <input
+                    type="text"
+                    value={editServerForm.matricula}
+                    onChange={(e) => setEditServerForm((prev) => ({ ...prev, matricula: e.target.value }))}
+                    placeholder="Ex: 12345"
+                    className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600 font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">calendar_month</span>
+                    Data de Admissão
+                  </label>
+                  <input
+                    type="date"
+                    value={editServerForm.admissao}
+                    onChange={(e) => setEditServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
+                    className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [color-scheme:dark]"
+                  />
+                </div>
               </div>
 
               {/* Nome do Servidor */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">person</span>
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">person</span>
                   Nome do Servidor
                 </label>
                 <input
@@ -1828,29 +1931,15 @@ const Ferias: React.FC = () => {
                   value={editServerForm.nome}
                   onChange={(e) => setEditServerForm((prev) => ({ ...prev, nome: e.target.value }))}
                   placeholder="Nome completo do servidor"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600"
-                />
-              </div>
-
-              {/* Admissão */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">calendar_month</span>
-                  Data de Admissão
-                </label>
-                <input
-                  type="date"
-                  value={editServerForm.admissao}
-                  onChange={(e) => setEditServerForm((prev) => ({ ...prev, admissao: e.target.value }))}
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [color-scheme:dark]"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600"
                 />
               </div>
 
               {/* Férias Vencidas */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">history</span>
-                  Quantidade de Férias Vencidas (Saldo)
+              <div className="space-y-1.5">
+                <label className="text-xs sm:text-sm font-medium text-gray-300 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] text-gray-500">history</span>
+                  Férias Vencidas (Saldo)
                 </label>
                 <input
                   type="number"
@@ -1858,28 +1947,28 @@ const Ferias: React.FC = () => {
                   value={editServerForm.feriasVencidas}
                   onChange={(e) => setEditServerForm((prev) => ({ ...prev, feriasVencidas: e.target.value }))}
                   placeholder="Ex: 1"
-                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600"
+                  className="w-full bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 sm:px-4 sm:py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-600"
                 />
-                <p className="text-xs text-gray-500 mt-1">Ao preencher, este saldo substituirá o histórico antigo e será a nova base de cálculo.</p>
+                <p className="text-[11px] text-gray-500">Ao preencher, este saldo substituirá o histórico antigo e será a nova base de cálculo.</p>
               </div>
             </div>
 
             {/* Footer / Botões */}
-            <div className="px-6 py-4 border-t border-border-dark bg-[#0a0a0a] flex gap-3">
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-t border-border-dark bg-[#0a0a0a] flex gap-2.5 shrink-0">
               <button
                 onClick={() => setIsEditServerModalOpen(false)}
-                className="flex-1 py-3 rounded-xl text-sm font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
+                className="flex-1 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleEditServerSave}
                 disabled={editServerSaving}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2"
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2"
               >
                 {editServerSaving ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -1887,7 +1976,7 @@ const Ferias: React.FC = () => {
                   </>
                 ) : (
                   <>
-                    <span className="material-symbols-outlined text-[18px]">save</span>
+                    <span className="material-symbols-outlined text-[16px] sm:text-[18px]">save</span>
                     Salvar Alterações
                   </>
                 )}
