@@ -52,13 +52,12 @@ const parseDate = (value: string) => {
   return new Date(year, month - 1, day);
 };
 
-const getPeriodosAdquiridos = (admissao: string) => {
+const getPeriodosAdquiridos = (admissao: string, targetDate: Date = new Date()) => {
   const admissaoDate = parseDate(admissao);
   if (isNaN(admissaoDate.getTime())) return 0;
-  const currentDate = new Date();
-  let periodos = currentDate.getFullYear() - admissaoDate.getFullYear();
-  const monthDiff = currentDate.getMonth() - admissaoDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && currentDate.getDate() < admissaoDate.getDate())) {
+  let periodos = targetDate.getFullYear() - admissaoDate.getFullYear();
+  const monthDiff = targetDate.getMonth() - admissaoDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && targetDate.getDate() < admissaoDate.getDate())) {
     periodos--;
   }
   return Math.max(0, periodos);
@@ -135,13 +134,19 @@ const RelatorioFerias: React.FC = () => {
         const historico = HISTORICO_FERIAS[normalizedMatricula] || HISTORICO_FERIAS[server.matricula];
         let historicalConsumed = 0;
         if (historico && hireDate) {
-          const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'));
+          // A data base de extração dos dados legados foi fixada no início de 2025.
+          const dataMigracao = new Date('2025-01-01T12:00:00');
+          const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'), dataMigracao);
           historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
         }
 
         const totalConsumed = consumedCount + historicalConsumed;
+        const saldoAdquirido = Math.max(0, periodosAdquiridos - totalConsumed);
         const feriasGozadas = Math.min(periodosAdquiridos, totalConsumed);
-        const feriasVencidas = Math.max(0, periodosAdquiridos - totalConsumed);
+        
+        // A period is legally 'vencido' only if it has passed its concessive period (which is 1 year after acquisition).
+        // This means out of all acquired periods, 1 is allowed to be available without being expired.
+        const feriasVencidas = Math.max(0, saldoAdquirido - 1);
 
         // Próximo vencimento
         let proximoVencimento: Date | null = null;
@@ -149,8 +154,10 @@ const RelatorioFerias: React.FC = () => {
         let diasParaVencer: number | null = null;
 
         if (!isNaN(admissaoDate.getTime())) {
+          // The next period to expire is the oldest unconsumed period.
+          // It was acquired at (admission + consumed) and expires 2 years after its start.
           const nextDate = new Date(
-            admissaoDate.getFullYear() + periodosAdquiridos + 1,
+            admissaoDate.getFullYear() + totalConsumed + 2,
             admissaoDate.getMonth(),
             admissaoDate.getDate()
           );
@@ -174,9 +181,12 @@ const RelatorioFerias: React.FC = () => {
         } else if (feriasVencidas > 0) {
           status = 'vencida';
           statusLabel = `${feriasVencidas} Período(s) Vencido(s)`;
-        } else if (diasParaVencer !== null && diasParaVencer <= diasLimiteVencendo && diasParaVencer > 0) {
+        } else if (saldoAdquirido > 0 && diasParaVencer !== null && diasParaVencer <= diasLimiteVencendo && diasParaVencer > 0) {
           status = 'vencendo';
           statusLabel = `Vence em ${diasParaVencer} dias`;
+        } else if (saldoAdquirido > 0) {
+          status = 'em_dia';
+          statusLabel = '1 Período Adquirido';
         }
 
         const admissaoFormatted = hireDate ? formatDate(parseDate(hireDate)) : '-';

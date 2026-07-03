@@ -74,7 +74,6 @@ const getProgramYear = (month: string) => {
 const getPeriodosAdquiridos = (admissao: string, targetDate: Date = new Date()) => {
   const admissaoDate = parseDate(admissao);
   if (isNaN(admissaoDate.getTime())) return 0;
-
   let periodos = targetDate.getFullYear() - admissaoDate.getFullYear();
   const monthDiff = targetDate.getMonth() - admissaoDate.getMonth();
   if (monthDiff < 0 || (monthDiff === 0 && targetDate.getDate() < admissaoDate.getDate())) {
@@ -458,12 +457,15 @@ const Ferias: React.FC = () => {
           let historicalConsumed = 0;
           if (historico && hireDate) {
             // Na época da migração, quantas férias o servidor já havia gozado?
-            const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'));
+            // A data base de extração dos dados legados foi fixada no início de 2025.
+            const dataMigracao = new Date('2025-01-01T12:00:00');
+            const periodosNaMigracao = getPeriodosAdquiridos(historico.admissao.split('/').reverse().join('-'), dataMigracao);
             historicalConsumed = Math.max(0, periodosNaMigracao - historico.feriasVencidas);
           }
 
           const totalConsumed = consumedCount + historicalConsumed;
-          calculatedVencidas = Math.max(0, periodosAdquiridos - totalConsumed);
+          const saldoAdquirido = Math.max(0, periodosAdquiridos - totalConsumed);
+          calculatedVencidas = Math.max(0, saldoAdquirido - 1);
           calculatedGozadas = Math.min(periodosAdquiridos, totalConsumed);
         }
 
