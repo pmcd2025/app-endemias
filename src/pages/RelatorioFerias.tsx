@@ -297,18 +297,18 @@ const RelatorioFerias: React.FC = () => {
   };
 
   const getStatusBadge = (item: ServidorRelatorio) => {
-    const base = 'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap';
+    const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap';
     switch (item.status) {
       case 'vencida':
-        return <span className={`${base} bg-red-500/10 text-red-400 border border-red-500/20`}><span className="material-symbols-outlined text-[14px]">error</span>{item.statusLabel}</span>;
+        return <span className={`${base} bg-red-500/10 text-red-400 border border-red-500/20`}>{item.feriasVencidas} Venc.</span>;
       case 'vencendo':
-        return <span className={`${base} bg-orange-500/10 text-orange-400 border border-orange-500/20`}><span className="material-symbols-outlined text-[14px]">schedule</span>{item.statusLabel}</span>;
+        return <span className={`${base} bg-orange-500/10 text-orange-400 border border-orange-500/20`}>{item.diasParaVencer}d</span>;
       case 'programado':
-        return <span className={`${base} bg-yellow-500/10 text-yellow-400 border border-yellow-500/20`}><span className="material-symbols-outlined text-[14px]">event_available</span>{item.statusLabel}</span>;
+        return <span className={`${base} bg-yellow-500/10 text-yellow-400 border border-yellow-500/20`}>Prog.</span>;
       case 'em_ferias':
-        return <span className={`${base} bg-blue-500/10 text-blue-400 border border-blue-500/20`}><span className="material-symbols-outlined text-[14px]">beach_access</span>{item.statusLabel}</span>;
+        return <span className={`${base} bg-blue-500/10 text-blue-400 border border-blue-500/20`}>Férias</span>;
       case 'em_dia':
-        return <span className={`${base} bg-green-500/10 text-green-400 border border-green-500/20`}><span className="material-symbols-outlined text-[14px]">check_circle</span>{item.statusLabel}</span>;
+        return <span className={`${base} bg-green-500/10 text-green-400 border border-green-500/20`}>OK</span>;
     }
   };
 
@@ -381,7 +381,7 @@ const RelatorioFerias: React.FC = () => {
   ];
 
   return (
-    <div className="p-4 md:p-8 animate-fade-in space-y-6">
+    <div className="p-3 md:p-5 animate-fade-in space-y-4 max-w-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-2">
         <div>
@@ -554,78 +554,80 @@ const RelatorioFerias: React.FC = () => {
         </div>
 
         {/* Tabela */}
-        <div className="overflow-x-auto">
+        <div className="overflow-hidden">
           {loading ? (
             <div className="py-16 text-center text-gray-400">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
               Carregando relatório de férias...
             </div>
           ) : processedData.length > 0 ? (
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left table-fixed border-collapse">
+              <colgroup>
+                <col style={{ width: '3px' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '28%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '31%' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="w-1"></th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('matricula')}>
-                    <div className="flex items-center gap-1">Matrícula <SortIcon column="matricula" /></div>
+                <tr className="bg-[#111111] text-gray-400 text-[10px] uppercase tracking-wider">
+                  <th></th>
+                  <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleSort('matricula')}>
+                    <div className="flex items-center gap-0.5">Mat. <SortIcon column="matricula" /></div>
                   </th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('nome')}>
-                    <div className="flex items-center gap-1">Nome <SortIcon column="nome" /></div>
+                  <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleSort('nome')}>
+                    <div className="flex items-center gap-0.5">Nome <SortIcon column="nome" /></div>
                   </th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('admissao')}>
-                    <div className="flex items-center gap-1">Admissão <SortIcon column="admissao" /></div>
+                  <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleSort('admissao')}>
+                    <div className="flex items-center gap-0.5">Admissão <SortIcon column="admissao" /></div>
                   </th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adquiridos</th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Gozadas</th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('feriasVencidas')}>
-                    <div className="flex items-center justify-center gap-1">Vencidas <SortIcon column="feriasVencidas" /></div>
+                  <th className="px-1 py-2 font-semibold border-b border-border-dark text-center" title="Períodos Adquiridos">Adq</th>
+                  <th className="px-1 py-2 font-semibold border-b border-border-dark text-center" title="Férias Gozadas">Goz</th>
+                  <th className="px-1 py-2 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors" title="Férias Vencidas" onClick={() => handleSort('feriasVencidas')}>
+                    <div className="flex items-center justify-center gap-0.5">Vc <SortIcon column="feriasVencidas" /></div>
                   </th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('diasParaVencer')}>
-                    <div className="flex items-center justify-center gap-1">Próx. Venc. <SortIcon column="diasParaVencer" /></div>
-                  </th>
-                  <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleSort('status')}>
-                    <div className="flex items-center justify-center gap-1">Situação <SortIcon column="status" /></div>
+                  <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleSort('status')}>
+                    <div className="flex items-center gap-0.5">Situação <SortIcon column="status" /></div>
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-dark">
                 {processedData.map((item) => (
                   <tr key={item.id} className="hover:bg-[#151515] transition-colors group">
-                    <td className="w-1 p-0">
-                      <div className={`w-1 h-full min-h-[52px] ${getUrgencyBar(item)} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                    <td className="p-0">
+                      <div className={`w-[3px] h-full min-h-[36px] ${getUrgencyBar(item)} opacity-80 group-hover:opacity-100 transition-opacity`} />
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
-                      <span className="font-mono text-gray-300 bg-black/40 px-2 py-1 rounded border border-white/5 text-sm">{item.matricula}</span>
+                    <td className="px-1.5 py-1.5">
+                      <span className="font-mono text-gray-300 text-[11px]">{item.matricula}</span>
                     </td>
-                    <td className="px-4 py-3.5 text-white font-medium whitespace-nowrap">{item.nome}</td>
-                    <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[14px] opacity-60">calendar_month</span>
-                        {item.admissao}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-gray-300 text-center font-medium">{item.periodosAdquiridos}</td>
-                    <td className="px-4 py-3.5 text-gray-300 text-center font-medium">{item.feriasGozadas}</td>
-                    <td className="px-4 py-3.5 text-center">
+                    <td className="px-1.5 py-1.5 text-white font-medium text-[12px] truncate" title={item.nome}>{item.nome}</td>
+                    <td className="px-1.5 py-1.5 text-gray-400 text-[11px]">{item.admissao}</td>
+                    <td className="px-1 py-1.5 text-gray-300 text-center font-medium text-[11px]">{item.periodosAdquiridos}</td>
+                    <td className="px-1 py-1.5 text-gray-300 text-center font-medium text-[11px]">{item.feriasGozadas}</td>
+                    <td className="px-1 py-1.5 text-center">
                       {item.feriasVencidas > 0 ? (
-                        <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 text-sm font-bold border border-red-500/20">
-                          {item.feriasVencidas}
-                        </span>
+                        <span className="text-red-400 text-[11px] font-bold">{item.feriasVencidas}</span>
                       ) : (
-                        <span className="text-gray-500 text-sm">0</span>
+                        <span className="text-gray-600 text-[11px]">0</span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                      <div className="text-sm text-gray-400">{item.proximoVencimentoStr}</div>
-                      {item.diasParaVencer !== null && item.diasParaVencer > 0 && (
-                        <div className={`text-[10px] font-medium mt-0.5 ${
-                          item.diasParaVencer <= 30 ? 'text-red-400' : item.diasParaVencer <= 90 ? 'text-orange-400' : 'text-gray-500'
-                        }`}>
-                          {item.diasParaVencer} dias
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-center">
-                      {getStatusBadge(item)}
+                    <td className="px-1.5 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        {getStatusBadge(item)}
+                        {item.proximoVencimentoStr !== '-' && (
+                          <span className="text-[10px] text-gray-500 truncate" title={`Próx. vencimento: ${item.proximoVencimentoStr}${item.diasParaVencer ? ` (${item.diasParaVencer} dias)` : ''}`}>
+                            {item.proximoVencimentoStr}
+                            {item.diasParaVencer !== null && item.diasParaVencer > 0 && (
+                              <span className={`ml-1 ${item.diasParaVencer <= 30 ? 'text-red-400' : item.diasParaVencer <= 90 ? 'text-orange-400' : 'text-gray-600'}`}>
+                                ({item.diasParaVencer}d)
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

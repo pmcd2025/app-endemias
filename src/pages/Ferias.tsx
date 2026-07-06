@@ -153,7 +153,12 @@ const Ferias: React.FC = () => {
   const [expandedLetters, setExpandedLetters] = useState<string[]>([]);
 
   // Page tab state
-  const [pageTab, setPageTab] = useState<'listagem' | 'relatorio'>('listagem');
+  const [pageTab, setPageTab] = useState<'listagem' | 'vencidas' | 'relatorio'>('listagem');
+
+  // Vencidas tab state
+  const [vencidasSearchTerm, setVencidasSearchTerm] = useState('');
+  const [vencidasSortKey, setVencidasSortKey] = useState<'nome' | 'matricula' | 'feriasVencidas' | 'admissao'>('feriasVencidas');
+  const [vencidasSortDir, setVencidasSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Report-specific state
   const [reportSearchTerm, setReportSearchTerm] = useState('');
@@ -535,6 +540,89 @@ const Ferias: React.FC = () => {
       .sort((a, b) => a.nome.localeCompare(b.nome));
   }, [data]);
 
+  // All servers with feriasVencidas > 0 (includes programados and em férias) for the Vencidas tab
+  const todosServidoresVencidos = useMemo(() => {
+    return data.filter((item) => item.feriasVencidas > 0);
+  }, [data]);
+
+  const processedVencidasData = useMemo(() => {
+    let result = [...todosServidoresVencidos];
+    if (vencidasSearchTerm) {
+      const lower = vencidasSearchTerm.toLowerCase();
+      result = result.filter(d => d.nome.toLowerCase().includes(lower) || d.matricula.toLowerCase().includes(lower));
+    }
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (vencidasSortKey) {
+        case 'nome': cmp = a.nome.localeCompare(b.nome); break;
+        case 'matricula': cmp = a.matricula.localeCompare(b.matricula); break;
+        case 'feriasVencidas': cmp = a.feriasVencidas - b.feriasVencidas; break;
+        case 'admissao': {
+          const da = parseDate(a.admissao).getTime();
+          const db = parseDate(b.admissao).getTime();
+          cmp = da - db;
+          break;
+        }
+      }
+      return vencidasSortDir === 'asc' ? cmp : -cmp;
+    });
+    return result;
+  }, [todosServidoresVencidos, vencidasSearchTerm, vencidasSortKey, vencidasSortDir]);
+
+  const vencidasStats = useMemo(() => {
+    const total = todosServidoresVencidos.length;
+    const totalPeriodos = todosServidoresVencidos.reduce((sum, d) => sum + d.feriasVencidas, 0);
+    const semProgramacao = todosServidoresVencidos.filter(d => !d.programacao && !d.feriasAtuais).length;
+    const comProgramacao = todosServidoresVencidos.filter(d => d.programacao).length;
+    const emFerias = todosServidoresVencidos.filter(d => d.feriasAtuais).length;
+    const com2OuMais = todosServidoresVencidos.filter(d => d.feriasVencidas >= 2).length;
+    return { total, totalPeriodos, semProgramacao, comProgramacao, emFerias, com2OuMais };
+  }, [todosServidoresVencidos]);
+
+  const handleVencidasSort = (key: typeof vencidasSortKey) => {
+    if (vencidasSortKey === key) { setVencidasSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+    else { setVencidasSortKey(key); setVencidasSortDir(key === 'nome' || key === 'matricula' ? 'asc' : 'desc'); }
+  };
+
+  const VencidasSortIcon = ({ column }: { column: typeof vencidasSortKey }) => {
+    if (vencidasSortKey !== column) return <span className="material-symbols-outlined text-[14px] opacity-30">unfold_more</span>;
+    return <span className="material-symbols-outlined text-[14px] text-red-400">{vencidasSortDir === 'asc' ? 'arrow_upward' : 'arrow_downward'}</span>;
+  };
+
+  const handleExportVencidasPDF = () => {
+    const doc = new jsPDF();
+    let y = 15;
+    doc.setFontSize(18);
+    doc.text('Servidores com Férias Vencidas', 14, y); y += 8;
+    doc.setFontSize(10);
+    doc.text(`Fundo Municipal de Saúde de Itabuna — Emitido em ${new Date().toLocaleDateString('pt-BR')}`, 14, y); y += 5;
+    doc.text(`Total: ${processedVencidasData.length} servidores | ${vencidasStats.totalPeriodos} período(s) vencido(s)`, 14, y); y += 10;
+    autoTable(doc, {
+      startY: y,
+      head: [['Matrícula', 'Nome', 'Admissão', 'Adquiridos', 'Gozadas', 'Vencidas', 'Situação']],
+      body: processedVencidasData.map(item => {
+        const info = getInfo(item);
+        return [
+          item.matricula, item.nome, item.admissao,
+          String(info.periodosAdquiridos), String(info.feriasGozadas),
+          String(item.feriasVencidas), info.status,
+        ];
+      }),
+      theme: 'striped',
+      headStyles: { fillColor: [220, 50, 50], textColor: [255, 255, 255], fontSize: 8 },
+      bodyStyles: { fontSize: 8 },
+      styles: { cellPadding: 2 },
+      columnStyles: { 1: { cellWidth: 55 } },
+      didParseCell: (data: any) => {
+        if (data.section === 'body' && data.column.index === 5) {
+          const val = parseInt(data.cell.raw, 10);
+          if (val >= 2) data.cell.styles.textColor = [220, 50, 50];
+        }
+      },
+    });
+    doc.save(`ferias_vencidas_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
     const lower = searchTerm.toLowerCase();
@@ -750,20 +838,22 @@ const Ferias: React.FC = () => {
       }
 
       let status: ReportItem['status'] = 'em_dia';
-      let statusLabel = 'Em dia';
+      let statusLabel = 'OK';
 
       if (item.feriasAtuais) {
         status = 'em_ferias';
-        statusLabel = `Em férias até ${formatDate(parseDate(item.feriasAtuais.periodEnd))}`;
+        statusLabel = 'Em Férias';
       } else if (item.programacao) {
         status = 'programado';
-        statusLabel = `Programado: ${formatProgramacao(item.programacao)}`;
+        const prog = formatProgramacao(item.programacao);
+        const shortProg = prog.substring(0, 3) + '/' + prog.split('/')[1];
+        statusLabel = `Prog: ${shortProg}`;
       } else if (item.feriasVencidas > 0) {
         status = 'vencida';
-        statusLabel = `${item.feriasVencidas} Período(s) Vencido(s)`;
+        statusLabel = `${item.feriasVencidas} Vencida(s)`;
       } else if (diasParaVencer !== null && diasParaVencer > 0 && diasParaVencer <= diasLimiteVencendo) {
         status = 'vencendo';
-        statusLabel = `Vence em ${diasParaVencer} dias`;
+        statusLabel = `Vence em ${diasParaVencer}d`;
       }
 
       return {
@@ -920,11 +1010,11 @@ const Ferias: React.FC = () => {
         </div>
       </div>
 
-      {/* Abas: Listagem / Relatório */}
-      <div className="flex border-b border-border-dark">
+      {/* Abas: Listagem / Vencidas / Relatório */}
+      <div className="flex border-b border-border-dark overflow-x-auto">
         <button
           onClick={() => setPageTab('listagem')}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all border-b-2 ${
+          className={`flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
             pageTab === 'listagem'
               ? 'text-primary border-primary bg-primary/5'
               : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-600'
@@ -934,8 +1024,24 @@ const Ferias: React.FC = () => {
           Listagem
         </button>
         <button
+          onClick={() => setPageTab('vencidas')}
+          className={`flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
+            pageTab === 'vencidas'
+              ? 'text-red-400 border-red-400 bg-red-400/5'
+              : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-600'
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px]">warning</span>
+          Vencidas
+          {vencidasStats.total > 0 && (
+            <span className="ml-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+              {vencidasStats.total}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setPageTab('relatorio')}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all border-b-2 ${
+          className={`flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-semibold transition-all border-b-2 whitespace-nowrap ${
             pageTab === 'relatorio'
               ? 'text-primary border-primary bg-primary/5'
               : 'text-gray-500 border-transparent hover:text-gray-300 hover:border-gray-600'
@@ -943,11 +1049,6 @@ const Ferias: React.FC = () => {
         >
           <span className="material-symbols-outlined text-[20px]">assessment</span>
           Relatório
-          {stats.totalVencidas > 0 && (
-            <span className="ml-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
-              {stats.totalVencidas}
-            </span>
-          )}
         </button>
       </div>
 
@@ -1226,6 +1327,263 @@ const Ferias: React.FC = () => {
       </div>
       </>)}
 
+      {/* ═══════════ ABA VENCIDAS ═══════════ */}
+      {pageTab === 'vencidas' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Cards de resumo */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center mb-2"><span className="material-symbols-outlined text-red-400">warning</span></div>
+              <p className="text-2xl font-bold text-red-400">{vencidasStats.total}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Servidores</p>
+            </div>
+            <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center mb-2"><span className="material-symbols-outlined text-red-400">event_busy</span></div>
+              <p className="text-2xl font-bold text-red-400">{vencidasStats.totalPeriodos}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Períodos Vencidos</p>
+            </div>
+            <div className="bg-orange-500/5 border border-orange-500/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center mb-2"><span className="material-symbols-outlined text-orange-400">priority_high</span></div>
+              <p className="text-2xl font-bold text-orange-400">{vencidasStats.semProgramacao}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Sem Programação</p>
+            </div>
+            <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-10 h-10 bg-yellow-500/20 rounded-xl flex items-center justify-center mb-2"><span className="material-symbols-outlined text-yellow-400">event_available</span></div>
+              <p className="text-2xl font-bold text-yellow-400">{vencidasStats.comProgramacao}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Já Programados</p>
+            </div>
+            <div className="bg-red-600/5 border border-red-600/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center col-span-2 sm:col-span-1">
+              <div className="w-10 h-10 bg-red-600/20 rounded-xl flex items-center justify-center mb-2"><span className="material-symbols-outlined text-red-500">emergency</span></div>
+              <p className="text-2xl font-bold text-red-500">{vencidasStats.com2OuMais}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Com 2+ Vencidas</p>
+            </div>
+          </div>
+
+          {/* Barra de urgência */}
+          {vencidasStats.total > 0 && (
+            <div className="bg-surface-dark border border-border-dark rounded-2xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-red-400">bar_chart</span>
+                  Distribuição por Urgência
+                </h3>
+              </div>
+              <div className="flex h-3 rounded-full overflow-hidden bg-[#111] gap-[2px]">
+                {vencidasStats.com2OuMais > 0 && <div className="bg-red-600 rounded-full transition-all duration-500" style={{ width: `${(vencidasStats.com2OuMais / vencidasStats.total) * 100}%` }} />}
+                {(vencidasStats.semProgramacao - vencidasStats.com2OuMais) > 0 && <div className="bg-red-400 rounded-full transition-all duration-500" style={{ width: `${((vencidasStats.semProgramacao - vencidasStats.com2OuMais) / vencidasStats.total) * 100}%` }} />}
+                {vencidasStats.comProgramacao > 0 && <div className="bg-yellow-500 rounded-full transition-all duration-500" style={{ width: `${(vencidasStats.comProgramacao / vencidasStats.total) * 100}%` }} />}
+                {vencidasStats.emFerias > 0 && <div className="bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${(vencidasStats.emFerias / vencidasStats.total) * 100}%` }} />}
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2.5">
+                {vencidasStats.com2OuMais > 0 && <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" />Crítico 2+ ({vencidasStats.com2OuMais})</span>}
+                {(vencidasStats.semProgramacao - vencidasStats.com2OuMais) > 0 && <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Sem Programação ({vencidasStats.semProgramacao - vencidasStats.com2OuMais})</span>}
+                {vencidasStats.comProgramacao > 0 && <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block" />Programados ({vencidasStats.comProgramacao})</span>}
+                {vencidasStats.emFerias > 0 && <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />Em Férias ({vencidasStats.emFerias})</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Tabela de vencidas */}
+          <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden flex flex-col shadow-xl">
+            {/* Toolbar */}
+            <div className="p-4 sm:p-5 border-b border-border-dark bg-surface-dark/50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-red-500/20 text-red-400 p-2 rounded-lg">
+                    <span className="material-symbols-outlined text-[20px]">warning</span>
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-semibold text-white">Servidores com Férias Vencidas</h2>
+                    <p className="text-xs text-gray-400">{processedVencidasData.length} de {todosServidoresVencidos.length} servidores</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-56">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[18px]">search</span>
+                    <input type="text" placeholder="Buscar servidor..." value={vencidasSearchTerm} onChange={e => setVencidasSearchTerm(e.target.value)}
+                      className="w-full bg-[#111111] border border-border-dark text-white rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 transition-all placeholder:text-gray-500" />
+                  </div>
+                  <button onClick={handleExportVencidasPDF} disabled={loading || processedVencidasData.length === 0}
+                    className="flex items-center gap-1.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-3 py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-red-600/20 active:scale-95 shrink-0">
+                    <span className="material-symbols-outlined text-[16px]">picture_as_pdf</span> PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block">
+              {loading ? (
+                <div className="py-16 text-center text-gray-400">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-400 mx-auto mb-3"></div>
+                  Carregando...
+                </div>
+              ) : processedVencidasData.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
+                        <th className="w-1"></th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleVencidasSort('matricula')}>
+                          <div className="flex items-center gap-1">Matrícula <VencidasSortIcon column="matricula" /></div>
+                        </th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleVencidasSort('nome')}>
+                          <div className="flex items-center gap-1">Nome <VencidasSortIcon column="nome" /></div>
+                        </th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleVencidasSort('admissao')}>
+                          <div className="flex items-center gap-1">Admissão <VencidasSortIcon column="admissao" /></div>
+                        </th>
+                        <th className="px-2 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adq.</th>
+                        <th className="px-2 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Goz.</th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleVencidasSort('feriasVencidas')}>
+                          <div className="flex items-center justify-center gap-1">Vencidas <VencidasSortIcon column="feriasVencidas" /></div>
+                        </th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap">Situação</th>
+                        <th className="px-3 py-3 font-semibold border-b border-border-dark text-center whitespace-nowrap sticky right-0 bg-[#111111] z-10 shadow-[-8px_0_12px_-4px_rgba(0,0,0,0.5)]">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-dark">
+                      {processedVencidasData.map(item => {
+                        const info = getInfo(item);
+                        return (
+                          <tr key={item.id} className="hover:bg-[#151515] transition-colors group/row">
+                            <td className="w-1 p-0"><div className={`w-1 h-full min-h-[48px] ${item.feriasVencidas >= 2 ? 'bg-red-600' : 'bg-red-400'} opacity-80 group-hover/row:opacity-100 transition-opacity`} /></td>
+                            <td className="px-3 py-3 whitespace-nowrap"><span className="font-mono text-gray-300 bg-black/40 px-1.5 py-1 rounded border border-white/5 text-xs">{item.matricula}</span></td>
+                            <td className="px-3 py-3 text-white font-medium text-sm max-w-[220px] truncate">{item.nome}</td>
+                            <td className="px-3 py-3 text-gray-400 whitespace-nowrap text-xs">{item.admissao}</td>
+                            <td className="px-2 py-3 text-gray-300 text-center text-sm font-medium">{info.periodosAdquiridos}</td>
+                            <td className="px-2 py-3 text-gray-300 text-center text-sm font-medium">{info.feriasGozadas}</td>
+                            <td className="px-3 py-3 text-center">
+                              <span className={`inline-flex items-center justify-center min-w-[28px] px-2.5 py-1 rounded-full text-sm font-bold border ${
+                                item.feriasVencidas >= 2
+                                  ? 'bg-red-600/20 text-red-400 border-red-500/30'
+                                  : 'bg-red-500/10 text-red-400 border-red-500/20'
+                              }`}>
+                                {item.feriasVencidas}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-center whitespace-nowrap">
+                              {item.feriasAtuais ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                                  <span className="material-symbols-outlined text-[12px]">beach_access</span>Em férias
+                                </span>
+                              ) : item.programacao ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                                  <span className="material-symbols-outlined text-[12px]">event_available</span>{formatProgramacao(item.programacao)}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                                  <span className="material-symbols-outlined text-[12px]">error</span>Pendente
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap text-center sticky right-0 bg-[#0a0a0a] group-hover/row:bg-[#151515] z-10 shadow-[-8px_0_12px_-4px_rgba(0,0,0,0.5)] transition-colors">
+                              <div className="flex items-center justify-center gap-0.5">
+                                <button onClick={() => setViewServer(item)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Visualizar">
+                                  <span className="material-symbols-outlined text-[18px]">visibility</span>
+                                </button>
+                                <button onClick={() => openEditServerModal(item)} className="p-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Editar">
+                                  <span className="material-symbols-outlined text-[18px]">edit</span>
+                                </button>
+                                {!item.programacao && !item.feriasAtuais && (
+                                  <button onClick={() => { openProgramModal(); }} className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors" title="Programar férias">
+                                    <span className="material-symbols-outlined text-[18px]">event_note</span>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-16 text-center text-gray-400">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <span className="material-symbols-outlined text-4xl text-green-500/50">check_circle</span>
+                    <p>Nenhum servidor com férias vencidas encontrado.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden">
+              {loading ? (
+                <div className="py-12 text-center text-gray-400">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-400 mx-auto mb-3"></div>
+                  Carregando...
+                </div>
+              ) : processedVencidasData.length > 0 ? (
+                <div className="divide-y divide-border-dark">
+                  {processedVencidasData.map(item => {
+                    const info = getInfo(item);
+                    return (
+                      <div key={item.id} className="p-4 hover:bg-[#151515] transition-colors">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-white font-semibold text-sm truncate">{item.nome}</p>
+                            <span className="font-mono text-gray-400 bg-black/40 px-1.5 py-0.5 rounded border border-white/5 text-xs inline-block mt-1">{item.matricula}</span>
+                          </div>
+                          <span className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 rounded-full text-sm font-bold shrink-0 ${
+                            item.feriasVencidas >= 2
+                              ? 'bg-red-600/20 text-red-400 border border-red-500/30'
+                              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                          }`}>
+                            {item.feriasVencidas}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-2">
+                          <div><span className="text-gray-500">Admissão:</span> <span className="text-gray-300">{item.admissao}</span></div>
+                          <div><span className="text-gray-500">Adquiridos:</span> <span className="text-gray-300">{info.periodosAdquiridos}</span></div>
+                          <div><span className="text-gray-500">Gozadas:</span> <span className="text-gray-300">{info.feriasGozadas}</span></div>
+                          <div>
+                            {item.feriasAtuais ? (
+                              <span className="text-blue-400 text-[11px] font-medium">Em férias</span>
+                            ) : item.programacao ? (
+                              <span className="text-yellow-400 text-[11px] font-medium">Prog: {formatProgramacao(item.programacao)}</span>
+                            ) : (
+                              <span className="text-red-400 text-[11px] font-medium">Pendente</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 pt-2 border-t border-border-dark/50">
+                          <button onClick={() => setViewServer(item)} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-xs">
+                            <span className="material-symbols-outlined text-[16px]">visibility</span>Ver
+                          </button>
+                          <button onClick={() => openEditServerModal(item)} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors text-xs">
+                            <span className="material-symbols-outlined text-[16px]">edit</span>Editar
+                          </button>
+                          {!item.programacao && !item.feriasAtuais && (
+                            <button onClick={() => openProgramModal()} className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded-lg transition-colors text-xs ml-auto">
+                              <span className="material-symbols-outlined text-[16px]">event_note</span>Programar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-gray-400">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <span className="material-symbols-outlined text-4xl text-green-500/50">check_circle</span>
+                    <p>Nenhum servidor com férias vencidas.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 sm:px-6 py-3 border-t border-border-dark bg-[#111111] flex items-center justify-between">
+              <span className="text-xs sm:text-sm text-gray-400">Mostrando {processedVencidasData.length} de {todosServidoresVencidos.length} servidores</span>
+              <span className="text-[11px] text-gray-600">Atualizado em {new Date().toLocaleString('pt-BR')}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════════ ABA RELATÓRIO ═══════════ */}
       {pageTab === 'relatorio' && (
         <div className="space-y-6 animate-fade-in">
@@ -1330,60 +1688,81 @@ const Ferias: React.FC = () => {
             </div>
 
             {/* Tabela */}
-            <div className="overflow-x-auto">
+            <div className="overflow-hidden">
               {loading ? (
                 <div className="py-16 text-center text-gray-400">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
                   Carregando relatório...
                 </div>
               ) : processedReportData.length > 0 ? (
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left table-fixed border-collapse">
+                  <colgroup>
+                    <col style={{ width: '3px' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '28%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '6%' }} />
+                    <col style={{ width: '31%' }} />
+                  </colgroup>
                   <thead>
-                    <tr className="bg-[#111111] text-gray-400 text-xs uppercase tracking-wider">
-                      <th className="w-1"></th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('matricula')}>
-                        <div className="flex items-center gap-1">Matrícula <ReportSortIcon column="matricula" /></div>
+                    <tr className="bg-[#111111] text-gray-400 text-[10px] uppercase tracking-wider">
+                      <th></th>
+                      <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleReportSort('matricula')}>
+                        <div className="flex items-center gap-0.5">Mat. <ReportSortIcon column="matricula" /></div>
                       </th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('nome')}>
-                        <div className="flex items-center gap-1">Nome <ReportSortIcon column="nome" /></div>
+                      <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleReportSort('nome')}>
+                        <div className="flex items-center gap-0.5">Nome <ReportSortIcon column="nome" /></div>
                       </th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('admissao')}>
-                        <div className="flex items-center gap-1">Admissão <ReportSortIcon column="admissao" /></div>
+                      <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleReportSort('admissao')}>
+                        <div className="flex items-center gap-0.5">Admissão <ReportSortIcon column="admissao" /></div>
                       </th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Adquiridos</th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark text-center whitespace-nowrap">Gozadas</th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('feriasVencidas')}>
-                        <div className="flex items-center justify-center gap-1">Vencidas <ReportSortIcon column="feriasVencidas" /></div>
+                      <th className="px-1 py-2 font-semibold border-b border-border-dark text-center" title="Períodos Adquiridos">Adq</th>
+                      <th className="px-1 py-2 font-semibold border-b border-border-dark text-center" title="Férias Gozadas">Goz</th>
+                      <th className="px-1 py-2 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors" title="Férias Vencidas" onClick={() => handleReportSort('feriasVencidas')}>
+                        <div className="flex items-center justify-center gap-0.5">Vc <ReportSortIcon column="feriasVencidas" /></div>
                       </th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('diasParaVencer')}>
-                        <div className="flex items-center justify-center gap-1">Próx. Venc. <ReportSortIcon column="diasParaVencer" /></div>
-                      </th>
-                      <th className="px-4 py-4 font-semibold border-b border-border-dark text-center cursor-pointer hover:text-gray-200 transition-colors whitespace-nowrap" onClick={() => handleReportSort('status')}>
-                        <div className="flex items-center justify-center gap-1">Situação <ReportSortIcon column="status" /></div>
+                      <th className="px-1.5 py-2 font-semibold border-b border-border-dark cursor-pointer hover:text-gray-200 transition-colors" onClick={() => handleReportSort('status')}>
+                        <div className="flex items-center gap-0.5">Situação <ReportSortIcon column="status" /></div>
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-dark">
                     {processedReportData.map(item => (
                       <tr key={item.id} className="hover:bg-[#151515] transition-colors group">
-                        <td className="w-1 p-0"><div className={`w-1 h-full min-h-[52px] ${getUrgencyBar(item)} opacity-80 group-hover:opacity-100 transition-opacity`} /></td>
-                        <td className="px-4 py-3.5 whitespace-nowrap"><span className="font-mono text-gray-300 bg-black/40 px-2 py-1 rounded border border-white/5 text-sm">{item.matricula}</span></td>
-                        <td className="px-4 py-3.5 text-white font-medium whitespace-nowrap">{item.nome}</td>
-                        <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap text-sm"><div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[14px] opacity-60">calendar_month</span>{item.admissao}</div></td>
-                        <td className="px-4 py-3.5 text-gray-300 text-center font-medium">{item.periodosAdquiridos}</td>
-                        <td className="px-4 py-3.5 text-gray-300 text-center font-medium">{item.feriasGozadas}</td>
-                        <td className="px-4 py-3.5 text-center">
-                          {item.feriasVencidas > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 text-sm font-bold border border-red-500/20">{item.feriasVencidas}</span>
-                          ) : (<span className="text-gray-500 text-sm">0</span>)}
+                        <td className="p-0">
+                          <div className={`w-[3px] h-full min-h-[36px] ${getUrgencyBar(item)} opacity-80 group-hover:opacity-100 transition-opacity`} />
                         </td>
-                        <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                          <div className="text-sm text-gray-400">{item.proximoVencimentoStr}</div>
-                          {item.diasParaVencer !== null && item.diasParaVencer > 0 && (
-                            <div className={`text-[10px] font-medium mt-0.5 ${item.diasParaVencer <= 30 ? 'text-red-400' : item.diasParaVencer <= 90 ? 'text-orange-400' : 'text-gray-500'}`}>{item.diasParaVencer} dias</div>
+                        <td className="px-1.5 py-1.5">
+                          <span className="font-mono text-gray-300 text-[11px]">{item.matricula}</span>
+                        </td>
+                        <td className="px-1.5 py-1.5 text-white font-medium text-[12px] truncate" title={item.nome}>{item.nome}</td>
+                        <td className="px-1.5 py-1.5 text-gray-400 text-[11px]">{item.admissao}</td>
+                        <td className="px-1 py-1.5 text-gray-300 text-center font-medium text-[11px]">{item.periodosAdquiridos}</td>
+                        <td className="px-1 py-1.5 text-gray-300 text-center font-medium text-[11px]">{item.feriasGozadas}</td>
+                        <td className="px-1 py-1.5 text-center">
+                          {item.feriasVencidas > 0 ? (
+                            <span className="text-red-400 text-[11px] font-bold">{item.feriasVencidas}</span>
+                          ) : (
+                            <span className="text-gray-600 text-[11px]">0</span>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 text-center">{getReportStatusBadge(item)}</td>
+                        <td className="px-1.5 py-1.5">
+                          <div className="flex items-center gap-1.5">
+                            {getReportStatusBadge(item)}
+                            {item.proximoVencimentoStr !== '-' && (
+                              <span className="text-[10px] text-gray-500 truncate" title={`Próx. vencimento: ${item.proximoVencimentoStr}${item.diasParaVencer ? ` (${item.diasParaVencer} dias)` : ''}`}>
+                                {item.proximoVencimentoStr}
+                                {item.diasParaVencer !== null && item.diasParaVencer > 0 && (
+                                  <span className={`ml-1 ${item.diasParaVencer <= 30 ? 'text-red-400' : item.diasParaVencer <= 90 ? 'text-orange-400' : 'text-gray-600'}`}>
+                                    ({item.diasParaVencer}d)
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

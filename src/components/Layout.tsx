@@ -131,7 +131,7 @@ const Layout: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto scrollbar-hide pb-24 md:pb-16">
-          <div className="w-full max-w-7xl mx-auto">
+          <div className="w-full mx-auto">
             <Outlet />
           </div>
         </div>
