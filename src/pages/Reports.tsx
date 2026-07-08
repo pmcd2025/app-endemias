@@ -449,7 +449,12 @@ const Reports: React.FC = () => {
         totalFaltasJust += item.faltasJustificadas;
         totalAtestados += item.atestadosMedicos;
         return item;
-      }).filter(item => item.totalOcorrencias > 0);
+      }).filter(item => {
+        if (analysisSortBy === 'faltasSem') return item.faltasSemJustificativa > 0;
+        if (analysisSortBy === 'faltasJust') return item.faltasJustificadas > 0;
+        if (analysisSortBy === 'atestados') return item.atestadosMedicos > 0;
+        return item.totalOcorrencias > 0;
+      });
 
       // Ordenar por critério selecionado
       analysisArray.sort((a, b) => {
@@ -1551,23 +1556,26 @@ const Reports: React.FC = () => {
 
                           {/* Contadores */}
                           <div className="flex items-center gap-2">
-                            {item.faltasSemJustificativa > 0 && (
+                            {(analysisSortBy === 'total' || analysisSortBy === 'faltasSem') && item.faltasSemJustificativa > 0 && (
                               <span className="px-2 py-1 rounded-lg bg-red-500/20 text-red-400 text-[9px] font-bold" title="Faltas S/ Justificativa">
                                 FS: {item.faltasSemJustificativa}
                               </span>
                             )}
-                            {item.faltasJustificadas > 0 && (
+                            {(analysisSortBy === 'total' || analysisSortBy === 'faltasJust') && item.faltasJustificadas > 0 && (
                               <span className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-400 text-[9px] font-bold" title="Faltas Justificadas">
                                 FJ: {item.faltasJustificadas}
                               </span>
                             )}
-                            {item.atestadosMedicos > 0 && (
+                            {(analysisSortBy === 'total' || analysisSortBy === 'atestados') && item.atestadosMedicos > 0 && (
                               <span className="px-2 py-1 rounded-lg bg-teal-500/20 text-teal-400 text-[9px] font-bold" title="Atestados Médicos">
                                 AM: {item.atestadosMedicos}
                               </span>
                             )}
                             <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-400 text-[10px] font-black border border-purple-500/30" title="Total">
-                              {item.totalOcorrencias}
+                              {analysisSortBy === 'faltasSem' ? item.faltasSemJustificativa :
+                               analysisSortBy === 'faltasJust' ? item.faltasJustificadas :
+                               analysisSortBy === 'atestados' ? item.atestadosMedicos :
+                               item.totalOcorrencias}
                             </span>
                           </div>
                         </div>
