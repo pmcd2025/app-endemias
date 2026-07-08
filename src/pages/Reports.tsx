@@ -1383,25 +1383,63 @@ const Reports: React.FC = () => {
                   )}
                 </div>
 
-                {/* Linha 2: Semanas */}
-                <div>
-                  <span className="text-xs text-slate-400 font-medium block mb-2">Semanas Epidemiológicas:</span>
-                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                    {weeks.map(week => (
-                      <button
-                        key={week}
-                        onClick={() => handleToggleAnalysisWeek(week)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${analysisWeeks.includes(week)
-                          ? 'bg-primary text-white shadow-lg shadow-primary/30'
-                          : 'bg-gray-800 text-slate-400 hover:bg-gray-700 hover:text-white'
-                          }`}
+                {/* Linha 2: Período de Análise */}
+                <div className="mt-2 pt-2 border-t border-gray-800/50">
+                  <span className="text-xs text-slate-400 font-medium block mb-3">Período de Análise:</span>
+                  <div className="flex items-end gap-3 max-w-lg">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Inicial</label>
+                      <select
+                        value={analysisWeeks.length > 0 ? Math.min(...analysisWeeks) : ''}
+                        onChange={(e) => {
+                          const start = parseInt(e.target.value);
+                          if (isNaN(start)) {
+                            setAnalysisWeeks([]);
+                            return;
+                          }
+                          const end = analysisWeeks.length > 0 ? Math.max(...analysisWeeks) : start;
+                          const newStart = Math.min(start, end);
+                          const newEnd = Math.max(start, end);
+                          setAnalysisWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
                       >
-                        {String(week).padStart(2, '0')}
-                      </button>
-                    ))}
+                        <option value="">Selecione...</option>
+                        {weeks.map(w => (
+                          <option key={`start-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="pb-3 px-2">
+                      <span className="text-slate-500 font-bold text-sm">até</span>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Final</label>
+                      <select
+                        value={analysisWeeks.length > 0 ? Math.max(...analysisWeeks) : ''}
+                        onChange={(e) => {
+                          const end = parseInt(e.target.value);
+                          if (isNaN(end)) {
+                            setAnalysisWeeks([]);
+                            return;
+                          }
+                          const start = analysisWeeks.length > 0 ? Math.min(...analysisWeeks) : end;
+                          const newStart = Math.min(start, end);
+                          const newEnd = Math.max(start, end);
+                          setAnalysisWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-gray-800 border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                      >
+                        <option value="">Selecione...</option>
+                        {weeks.map(w => (
+                          <option key={`end-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <p className="text-[9px] text-slate-500 mt-1">
-                    {analysisWeeks.length === 0 ? 'Selecione pelo menos uma semana' : `${analysisWeeks.length} semana(s) selecionada(s)`}
+                  <p className="text-[10px] text-slate-500 mt-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    {analysisWeeks.length === 0 ? 'Selecione o período desejado para análise' : `Analisando um período de ${analysisWeeks.length} semana(s)`}
                   </p>
                 </div>
               </div>
@@ -1597,24 +1635,64 @@ const Reports: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Semanas (Checkboxes) */}
+                {/* Semanas (Período) */}
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase mb-2 block">Semanas Epidemiológicas (selecione uma ou mais)</label>
-                  <div className="grid grid-cols-8 gap-1.5 max-h-32 overflow-y-auto p-2 bg-[#1c2127] rounded-lg border border-gray-700">
-                    {weeks.map(w => (
-                      <button
-                        key={w}
-                        onClick={() => handleToggleWeek(w)}
-                        className={`p-2 rounded-lg text-xs font-bold transition-all ${selectedWeeks.includes(w)
-                          ? 'bg-primary text-white shadow-lg'
-                          : 'bg-gray-800 text-slate-400 hover:bg-gray-700'
-                          }`}
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block mb-3">Período de Seleção</span>
+                  <div className="flex items-end gap-3 max-w-lg">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Inicial</label>
+                      <select
+                        value={selectedWeeks.length > 0 ? Math.min(...selectedWeeks) : ''}
+                        onChange={(e) => {
+                          const start = parseInt(e.target.value);
+                          if (isNaN(start)) {
+                            setSelectedWeeks([]);
+                            return;
+                          }
+                          const end = selectedWeeks.length > 0 ? Math.max(...selectedWeeks) : start;
+                          const newStart = Math.min(start, end);
+                          const newEnd = Math.max(start, end);
+                          setSelectedWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#1c2127] border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
                       >
-                        {w.toString().padStart(2, '0')}
-                      </button>
-                    ))}
+                        <option value="">Selecione...</option>
+                        {weeks.map(w => (
+                          <option key={`start-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="pb-3 px-2">
+                      <span className="text-slate-500 font-bold text-sm">até</span>
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Final</label>
+                      <select
+                        value={selectedWeeks.length > 0 ? Math.max(...selectedWeeks) : ''}
+                        onChange={(e) => {
+                          const end = parseInt(e.target.value);
+                          if (isNaN(end)) {
+                            setSelectedWeeks([]);
+                            return;
+                          }
+                          const start = selectedWeeks.length > 0 ? Math.min(...selectedWeeks) : end;
+                          const newStart = Math.min(start, end);
+                          const newEnd = Math.max(start, end);
+                          setSelectedWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                        }}
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#1c2127] border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                      >
+                        <option value="">Selecione...</option>
+                        {weeks.map(w => (
+                          <option key={`end-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <p className="text-[9px] text-slate-500 mt-1">{selectedWeeks.length} semana(s) selecionada(s)</p>
+                  <p className="text-[10px] text-slate-500 mt-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm">info</span>
+                    {selectedWeeks.length === 0 ? 'Selecione o período desejado' : `Período selecionado: ${selectedWeeks.length} semana(s)`}
+                  </p>
                 </div>
               </div>
 
@@ -2117,24 +2195,65 @@ const Reports: React.FC = () => {
               </div>
 
               {/* Semanas */}
-              <div className="space-y-1.5">
+              <div className="space-y-3">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Semanas Epidemiológicas ({batchExportWeeks.length} selecionada(s))
+                  Período de Análise
                 </label>
-                <div className="grid grid-cols-8 gap-1.5 max-h-40 overflow-y-auto p-2 bg-[#1c2127] rounded-xl border border-gray-700">
-                  {weeks.map(w => (
-                    <button
-                      key={w}
-                      onClick={() => handleToggleBatchWeek(w)}
-                      className={`p-2 rounded-lg text-xs font-bold transition-all ${batchExportWeeks.includes(w)
-                        ? 'bg-amber-500 text-white shadow-lg'
-                        : 'bg-gray-800 text-slate-400 hover:bg-gray-700'
-                        }`}
+                <div className="flex items-end gap-3 max-w-lg">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Inicial</label>
+                    <select
+                      value={batchExportWeeks.length > 0 ? Math.min(...batchExportWeeks) : ''}
+                      onChange={(e) => {
+                        const start = parseInt(e.target.value);
+                        if (isNaN(start)) {
+                          setBatchExportWeeks([]);
+                          return;
+                        }
+                        const end = batchExportWeeks.length > 0 ? Math.max(...batchExportWeeks) : start;
+                        const newStart = Math.min(start, end);
+                        const newEnd = Math.max(start, end);
+                        setBatchExportWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#1c2127] border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
                     >
-                      {w.toString().padStart(2, '0')}
-                    </button>
-                  ))}
+                      <option value="">Selecione...</option>
+                      {weeks.map(w => (
+                        <option key={`start-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="pb-3 px-2">
+                    <span className="text-slate-500 font-bold text-sm">até</span>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">Semana Final</label>
+                    <select
+                      value={batchExportWeeks.length > 0 ? Math.max(...batchExportWeeks) : ''}
+                      onChange={(e) => {
+                        const end = parseInt(e.target.value);
+                        if (isNaN(end)) {
+                          setBatchExportWeeks([]);
+                          return;
+                        }
+                        const start = batchExportWeeks.length > 0 ? Math.min(...batchExportWeeks) : end;
+                        const newStart = Math.min(start, end);
+                        const newEnd = Math.max(start, end);
+                        setBatchExportWeeks(Array.from({ length: newEnd - newStart + 1 }, (_, i) => newStart + i));
+                      }}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[#1c2127] border border-gray-700 text-white text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                    >
+                      <option value="">Selecione...</option>
+                      {weeks.map(w => (
+                        <option key={`end-${w}`} value={w}>Semana {String(w).padStart(2, '0')}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
+                <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-sm">info</span>
+                  {batchExportWeeks.length === 0 ? 'Selecione o período desejado' : `Período selecionado: ${batchExportWeeks.length} semana(s)`}
+                </p>
               </div>
 
               {/* Seleção de Servidores */}
