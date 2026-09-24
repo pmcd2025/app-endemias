@@ -9,6 +9,7 @@ build/
 
 # IDE
 .idea/
+.vscode/
 *.swp
 *.swo
 .DS_Store
@@ -24,3 +25,19 @@ npm-debug.log*
 
 # Cache
 .cache/
+*.tsbuildinfo
+
+# Temporary / Migration scripts
+*.mjs
+scratch.*
+*.bak
+
+# Temporary data files
+comparison_report.json
+db_servers.txt
+historico_preview.json
+matches.json
+parsed_pdf_records.json
+pdf_text.txt
+test_output.txt
+metadata.json
