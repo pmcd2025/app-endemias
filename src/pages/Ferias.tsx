@@ -148,6 +148,13 @@ const Ferias: React.FC = () => {
   const [programModalTab, setProgramModalTab] = useState<'em_ferias' | 'programados' | 'novos'>('novos');
   const [programSelections, setProgramSelections] = useState<Record<string, ProgramSelection>>({});
   const [programSearchTerm, setProgramSearchTerm] = useState('');
+
+  // Edit Programacao Modal state
+  const [editProgramacaoItem, setEditProgramacaoItem] = useState<LinhaFerias | null>(null);
+  const [editProgramacaoMonth, setEditProgramacaoMonth] = useState('');
+  const [editProgramacaoYear, setEditProgramacaoYear] = useState('');
+  const [editProgramacaoSaving, setEditProgramacaoSaving] = useState(false);
+  const [editProgramacaoError, setEditProgramacaoError] = useState('');
   
   // Accordion state
   const [expandedLetters, setExpandedLetters] = useState<string[]>([]);
@@ -708,6 +715,46 @@ const Ferias: React.FC = () => {
       alert('Não foi possível cancelar a programação.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEditProgramacao = (item: LinhaFerias) => {
+    if (!item.programacao) return;
+    const startDate = parseDate(item.programacao.periodStart);
+    setEditProgramacaoItem(item);
+    setEditProgramacaoMonth(String(startDate.getMonth() + 1).padStart(2, '0'));
+    setEditProgramacaoYear(String(startDate.getFullYear()));
+    setEditProgramacaoError('');
+  };
+
+  const handleEditProgramacaoSave = async () => {
+    if (!editProgramacaoItem?.programacao) return;
+    if (!editProgramacaoMonth || !editProgramacaoYear) {
+      setEditProgramacaoError('Selecione o mês e o ano.');
+      return;
+    }
+
+    const year = parseInt(editProgramacaoYear, 10);
+    const month = parseInt(editProgramacaoMonth, 10);
+    const lastDay = new Date(year, month, 0).getDate();
+    const newStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const newEnd   = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    setEditProgramacaoSaving(true);
+    setEditProgramacaoError('');
+    try {
+      const { error } = await (supabase
+        .from('vacations')
+        .update({ period_start: newStart, period_end: newEnd } as unknown as never)
+        .eq('id', editProgramacaoItem.programacao.id) as any);
+      if (error) throw error;
+      setEditProgramacaoItem(null);
+      await fetchFeriasData();
+    } catch (error: any) {
+      console.error('Erro ao editar programação:', error);
+      setEditProgramacaoError(error?.message || 'Não foi possível editar a programação.');
+    } finally {
+      setEditProgramacaoSaving(false);
     }
   };
 
@@ -1962,6 +2009,13 @@ const Ferias: React.FC = () => {
                                 }`}>
                                   em {diasAte} dias
                                 </span>
+                                <button
+                                  onClick={() => openEditProgramacao(item)}
+                                  className="text-gray-500 hover:text-blue-400 transition-colors"
+                                  title="Editar programação"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">edit_calendar</span>
+                                </button>
                                 <button onClick={() => handleCancelProgramacao(item.programacao!.id)}
                                   className="text-gray-500 hover:text-red-400 transition-colors" title="Cancelar programação">
                                   <span className="material-symbols-outlined text-[16px]">cancel</span>
@@ -2109,6 +2163,114 @@ const Ferias: React.FC = () => {
         </div>
         );
       })()}
+
+      {/* ===== Modal Editar Programação de Férias ===== */}
+      {editProgramacaoItem && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+          onClick={() => setEditProgramacaoItem(null)}
+        >
+          <div
+            className="bg-[#111111] border border-border-dark rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-blue-400 text-[18px]">edit_calendar</span>
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-sm">Editar Programação</p>
+                  <p className="text-gray-400 text-[11px] truncate max-w-[200px]">{editProgramacaoItem.nome}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditProgramacaoItem(null)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-5 space-y-4">
+              <p className="text-gray-400 text-xs">
+                Selecione o novo mês de férias para <span className="text-white font-medium">{editProgramacaoItem.nome}</span>.
+                A programação atual ({editProgramacaoItem.programacao ? formatProgramacao(editProgramacaoItem.programacao) : ''}) será substituída.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Mês */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Mês</label>
+                  <select
+                    value={editProgramacaoMonth}
+                    onChange={(e) => setEditProgramacaoMonth(e.target.value)}
+                    className="bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+                  >
+                    {MONTH_NAMES.map((name, i) => (
+                      <option key={i} value={String(i + 1).padStart(2, '0')}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Ano */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Ano</label>
+                  <select
+                    value={editProgramacaoYear}
+                    onChange={(e) => setEditProgramacaoYear(e.target.value)}
+                    className="bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+                  >
+                    {[new Date().getFullYear(), new Date().getFullYear() + 1, new Date().getFullYear() + 2].map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Nova data preview */}
+              {editProgramacaoMonth && editProgramacaoYear && (
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3">
+                  <span className="material-symbols-outlined text-blue-400 text-[16px]">info</span>
+                  <p className="text-blue-300 text-xs">
+                    Nova programação: <span className="font-bold">{MONTH_NAMES[parseInt(editProgramacaoMonth, 10) - 1]}/{editProgramacaoYear}</span>
+                  </p>
+                </div>
+              )}
+
+              {editProgramacaoError && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                  <span className="material-symbols-outlined text-red-400 text-[16px]">error</span>
+                  <p className="text-red-400 text-xs">{editProgramacaoError}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-5 flex gap-2">
+              <button
+                onClick={() => setEditProgramacaoItem(null)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditProgramacaoSave}
+                disabled={editProgramacaoSaving || !editProgramacaoMonth || !editProgramacaoYear}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                {editProgramacaoSaving ? (
+                  <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Salvando...</>
+                ) : (
+                  <><span className="material-symbols-outlined text-[16px]">save</span> Salvar Alteração</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Adicionar Servidor */}
       {isAddServerModalOpen && (
