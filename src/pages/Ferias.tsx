@@ -155,6 +155,13 @@ const Ferias: React.FC = () => {
   const [editProgramacaoYear, setEditProgramacaoYear] = useState('');
   const [editProgramacaoSaving, setEditProgramacaoSaving] = useState(false);
   const [editProgramacaoError, setEditProgramacaoError] = useState('');
+
+  // Edit Férias Ativas (Em Férias) Modal state
+  const [editFeriasAtivasItem, setEditFeriasAtivasItem] = useState<LinhaFerias | null>(null);
+  const [editFeriasAtivasStart, setEditFeriasAtivasStart] = useState('');
+  const [editFeriasAtivasEnd, setEditFeriasAtivasEnd] = useState('');
+  const [editFeriasAtivasSaving, setEditFeriasAtivasSaving] = useState(false);
+  const [editFeriasAtivasError, setEditFeriasAtivasError] = useState('');
   
   // Accordion state
   const [expandedLetters, setExpandedLetters] = useState<string[]>([]);
@@ -725,6 +732,71 @@ const Ferias: React.FC = () => {
     setEditProgramacaoMonth(String(startDate.getMonth() + 1).padStart(2, '0'));
     setEditProgramacaoYear(String(startDate.getFullYear()));
     setEditProgramacaoError('');
+  };
+
+  const openEditFeriasAtivas = (item: LinhaFerias) => {
+    if (!item.feriasAtuais) return;
+    setEditFeriasAtivasItem(item);
+    setEditFeriasAtivasStart(item.feriasAtuais.periodStart);
+    setEditFeriasAtivasEnd(item.feriasAtuais.periodEnd);
+    setEditFeriasAtivasError('');
+  };
+
+  const handleEditFeriasAtivasSave = async () => {
+    if (!editFeriasAtivasItem?.feriasAtuais) return;
+    if (!editFeriasAtivasStart || !editFeriasAtivasEnd) {
+      setEditFeriasAtivasError('Selecione as datas de início e fim.');
+      return;
+    }
+    if (editFeriasAtivasStart > editFeriasAtivasEnd) {
+      setEditFeriasAtivasError('A data de início não pode ser posterior à data de fim.');
+      return;
+    }
+
+    setEditFeriasAtivasSaving(true);
+    setEditFeriasAtivasError('');
+    try {
+      const startDate = parseDate(editFeriasAtivasStart);
+      const endDate = parseDate(editFeriasAtivasEnd);
+      const daysCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const now = new Date();
+      const isActive = startDate <= now && endDate >= now;
+
+      const { error } = await (supabase
+        .from('vacations')
+        .update({
+          period_start: editFeriasAtivasStart,
+          period_end: editFeriasAtivasEnd,
+          days_count: daysCount,
+          status: isActive ? 'active' : 'scheduled',
+        } as unknown as never)
+        .eq('id', editFeriasAtivasItem.feriasAtuais.id) as any);
+
+      if (error) throw error;
+      setEditFeriasAtivasItem(null);
+      await fetchFeriasData();
+    } catch (error: any) {
+      console.error('Erro ao editar férias ativas:', error);
+      setEditFeriasAtivasError(error?.message || 'Não foi possível editar o período de férias.');
+    } finally {
+      setEditFeriasAtivasSaving(false);
+    }
+  };
+
+  const handleCancelarFeriasAtivas = async (vacationId: string) => {
+    if (!window.confirm('Deseja cancelar/remover este período de férias? O servidor voltará ao status anterior.')) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('vacations').delete().eq('id', vacationId);
+      if (error) throw error;
+      setEditFeriasAtivasItem(null);
+      await fetchFeriasData();
+    } catch (error: any) {
+      console.error('Erro ao cancelar férias ativas:', error);
+      alert(error?.message || 'Não foi possível cancelar as férias.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEditProgramacaoSave = async () => {
@@ -1963,6 +2035,17 @@ const Ferias: React.FC = () => {
                                   {formatDate(parseDate(item.feriasAtuais.periodStart))} → {formatDate(parseDate(item.feriasAtuais.periodEnd))}
                                 </p>
                               )}
+                              {/* Botões de ação para corrigir status */}
+                              <div className="flex items-center justify-end gap-1 mt-1.5">
+                                <button
+                                  onClick={() => openEditFeriasAtivas(item)}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition-colors text-[10px] font-semibold"
+                                  title="Editar período de férias / corrigir status"
+                                >
+                                  <span className="material-symbols-outlined text-[12px]">edit_calendar</span>
+                                  Corrigir
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </li>
@@ -2267,6 +2350,132 @@ const Ferias: React.FC = () => {
                   <><span className="material-symbols-outlined text-[16px]">save</span> Salvar Alteração</>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Modal Editar Férias Ativas (Em Férias) ===== */}
+      {editFeriasAtivasItem && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+          onClick={() => setEditFeriasAtivasItem(null)}
+        >
+          <div
+            className="bg-[#111111] border border-border-dark rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-border-dark flex items-center justify-between bg-gradient-to-r from-orange-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-orange-400 text-[18px]">edit_calendar</span>
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-sm">Corrigir Status de Férias</p>
+                  <p className="text-gray-400 text-[11px] truncate max-w-[200px]">{editFeriasAtivasItem.nome}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditFeriasAtivasItem(null)}
+                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-5 space-y-4">
+              {/* Aviso explicativo */}
+              <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3">
+                <span className="material-symbols-outlined text-orange-400 text-[16px] mt-0.5 shrink-0">info</span>
+                <p className="text-orange-300 text-xs leading-relaxed">
+                  Use esta opção para corrigir o período quando o servidor <strong>não entrou efetivamente de férias</strong>, mas está registrado como "Em Férias". Você pode ajustar as datas ou cancelar o registro.
+                </p>
+              </div>
+
+              <p className="text-gray-400 text-xs">
+                Período atual de <span className="text-white font-medium">{editFeriasAtivasItem.nome}</span>:
+                <span className="text-blue-400 font-semibold ml-1">
+                  {editFeriasAtivasItem.feriasAtuais ? `${formatDate(parseDate(editFeriasAtivasItem.feriasAtuais.periodStart))} → ${formatDate(parseDate(editFeriasAtivasItem.feriasAtuais.periodEnd))}` : ''}
+                </span>
+              </p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Data Início */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Data Início</label>
+                  <input
+                    type="date"
+                    value={editFeriasAtivasStart}
+                    onChange={(e) => setEditFeriasAtivasStart(e.target.value)}
+                    className="bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all cursor-pointer [color-scheme:dark]"
+                  />
+                </div>
+
+                {/* Data Fim */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Data Fim</label>
+                  <input
+                    type="date"
+                    value={editFeriasAtivasEnd}
+                    onChange={(e) => setEditFeriasAtivasEnd(e.target.value)}
+                    className="bg-[#1a1a1a] border border-border-dark text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all cursor-pointer [color-scheme:dark]"
+                  />
+                </div>
+              </div>
+
+              {/* Preview novo período */}
+              {editFeriasAtivasStart && editFeriasAtivasEnd && editFeriasAtivasStart <= editFeriasAtivasEnd && (
+                <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3">
+                  <span className="material-symbols-outlined text-orange-400 text-[16px]">date_range</span>
+                  <p className="text-orange-300 text-xs">
+                    Novo período: <span className="font-bold">{formatDate(parseDate(editFeriasAtivasStart))}</span> até <span className="font-bold">{formatDate(parseDate(editFeriasAtivasEnd))}</span>
+                    <span className="text-gray-500 ml-1">
+                      ({Math.ceil((parseDate(editFeriasAtivasEnd).getTime() - parseDate(editFeriasAtivasStart).getTime()) / (1000*60*60*24)) + 1} dias)
+                    </span>
+                  </p>
+                </div>
+              )}
+
+              {editFeriasAtivasError && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                  <span className="material-symbols-outlined text-red-400 text-[16px]">error</span>
+                  <p className="text-red-400 text-xs">{editFeriasAtivasError}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 pb-5 flex flex-col gap-2">
+              {/* Botão para cancelar o registro de férias */}
+              <button
+                onClick={() => editFeriasAtivasItem.feriasAtuais && handleCancelarFeriasAtivas(editFeriasAtivasItem.feriasAtuais.id)}
+                disabled={editFeriasAtivasSaving || saving}
+                className="w-full py-2.5 rounded-xl text-xs font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[14px]">event_busy</span>
+                Cancelar este registro de férias
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditFeriasAtivasItem(null)}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-medium text-gray-400 border border-border-dark hover:bg-white/5 transition-colors"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={handleEditFeriasAtivasSave}
+                  disabled={editFeriasAtivasSaving || !editFeriasAtivasStart || !editFeriasAtivasEnd}
+                  className="flex-1 bg-orange-500 hover:bg-orange-400 disabled:opacity-40 text-white py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  {editFeriasAtivasSaving ? (
+                    <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Salvando...</>
+                  ) : (
+                    <><span className="material-symbols-outlined text-[14px]">save</span> Salvar Correção</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
