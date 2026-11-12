@@ -441,6 +441,14 @@ const Servers: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
+  // Estatísticas de vínculo (sobre todos os servidores ativos, sem filtro de busca/status)
+  const totalServidores = servers.length;
+  const totalEfetivos = servers.filter(s => s.vinculo === 'Efetivo').length;
+  const totalContratados = servers.filter(s => s.vinculo === 'Contrato').length;
+  const totalSemVinculo = servers.filter(s => !s.vinculo).length;
+  const pctEfetivos = totalServidores > 0 ? Math.round((totalEfetivos / totalServidores) * 100) : 0;
+  const pctContratados = totalServidores > 0 ? Math.round((totalContratados / totalServidores) * 100) : 0;
+
   // Funções de toggle para expandir/colapsar cards hierárquicos
   const toggleGeralExpanded = (id: string) => {
     setExpandedGerais(prev => {
@@ -626,6 +634,73 @@ const Servers: React.FC = () => {
             <span className="hidden sm:inline">PDF</span>
           </button>
         </div>
+
+        {/* ── Cards de Vínculo ── */}
+        {!isLoading && totalServidores > 0 && (
+          <div className="rounded-2xl border border-gray-800 bg-[#1c2127] overflow-hidden">
+            {/* Título */}
+            <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-base">pie_chart</span>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Divisão por Vínculo</span>
+              <span className="ml-auto text-[10px] font-bold text-slate-500 bg-[#101922] px-2 py-0.5 rounded">{totalServidores} total</span>
+            </div>
+
+            {/* Barra de proporção */}
+            <div className="px-4 pt-3 pb-1">
+              <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-[#101922]">
+                {totalEfetivos > 0 && (
+                  <div
+                    className="bg-emerald-500 rounded-full transition-all duration-700"
+                    style={{ width: `${pctEfetivos}%` }}
+                  />
+                )}
+                {totalContratados > 0 && (
+                  <div
+                    className="bg-blue-500 rounded-full transition-all duration-700"
+                    style={{ width: `${pctContratados}%` }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Contadores */}
+            <div className="grid grid-cols-2 divide-x divide-gray-800 px-4 pb-3 pt-2">
+              {/* Efetivos */}
+              <div className="flex items-center gap-3 pr-4">
+                <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25 shrink-0">
+                  <span className="material-symbols-outlined text-emerald-400 text-lg">verified</span>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-emerald-400 leading-none">{totalEfetivos}</p>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Efetivos</p>
+                  <span className="text-[9px] font-bold text-emerald-500/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">{pctEfetivos}%</span>
+                </div>
+              </div>
+
+              {/* Contratados */}
+              <div className="flex items-center gap-3 pl-4">
+                <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/25 shrink-0">
+                  <span className="material-symbols-outlined text-blue-400 text-lg">description</span>
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-blue-400 leading-none">{totalContratados}</p>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Contratados</p>
+                  <span className="text-[9px] font-bold text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full border border-blue-500/20">{pctContratados}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Aviso: sem vínculo definido */}
+            {totalSemVinculo > 0 && (
+              <div className="px-4 pb-3">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
+                  <p className="text-[10px] text-amber-400 font-semibold">{totalSemVinculo} servidor{totalSemVinculo > 1 ? 'es' : ''} sem vínculo definido</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="relative">
           <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
