@@ -44,6 +44,9 @@ const Servers: React.FC = () => {
   const [expandedGerais, setExpandedGerais] = useState<Set<string>>(new Set());
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
 
+  // Controle dos dropdowns de vínculo
+  const [vinculoDropdown, setVinculoDropdown] = useState<'efetivo' | 'contrato' | null>(null);
+
   const [formData, setFormData] = useState<NewServerForm>({
     nome: '',
     funcao: '',
@@ -635,70 +638,116 @@ const Servers: React.FC = () => {
           </button>
         </div>
 
-        {/* ── Cards de Vínculo ── */}
+        {/* ── Cards de Vínculo em Gota ── */}
         {!isLoading && totalServidores > 0 && (
-          <div className="rounded-2xl border border-gray-800 bg-[#1c2127] overflow-hidden">
-            {/* Título */}
-            <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-base">pie_chart</span>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Divisão por Vínculo</span>
-              <span className="ml-auto text-[10px] font-bold text-slate-500 bg-[#101922] px-2 py-0.5 rounded">{totalServidores} total</span>
+          <div className="flex gap-3">
+
+            {/* Card Efetivos */}
+            <div className="flex-1">
+              <button
+                onClick={() => setVinculoDropdown(v => v === 'efetivo' ? null : 'efetivo')}
+                className={`w-full flex flex-col items-center justify-center gap-1 py-5 px-3 transition-all active:scale-95
+                  ${vinculoDropdown === 'efetivo'
+                    ? 'bg-emerald-500/20 border-emerald-400/60 shadow-emerald-500/20 shadow-lg'
+                    : 'bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/15'
+                  }
+                  border`}
+                style={{ borderRadius: '60% 40% 55% 45% / 55% 45% 60% 40%' }}
+              >
+                <span className="material-symbols-outlined text-emerald-400 text-2xl">verified</span>
+                <p className="text-3xl font-black text-emerald-400 leading-none">{totalEfetivos}</p>
+                <p className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-wider">Efetivos</p>
+                <span className="mt-1 text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  {pctEfetivos}%
+                </span>
+              </button>
+
+              {/* Lista Efetivos */}
+              {vinculoDropdown === 'efetivo' && (
+                <div className="mt-2 rounded-2xl border border-emerald-500/30 bg-[#1c2127] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-3 py-2 border-b border-emerald-500/20 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-emerald-400 text-sm">verified</span>
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Servidores Efetivos ({totalEfetivos})</span>
+                  </div>
+                  <ul className="max-h-52 overflow-y-auto divide-y divide-gray-800">
+                    {servers.filter(s => s.vinculo === 'Efetivo').map(s => (
+                      <li key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors">
+                        <div
+                          className="h-7 w-7 rounded-full bg-cover bg-center shrink-0"
+                          style={{ backgroundImage: `url('${s.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=10b981&color=fff&size=60`}')` }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{s.name}</p>
+                          <p className="text-[9px] text-slate-500">{s.role} · {s.matricula}</p>
+                        </div>
+                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getStatusColor(s.status)}`} />
+                      </li>
+                    ))}
+                    {totalEfetivos === 0 && (
+                      <li className="py-4 text-center text-[11px] text-slate-500">Nenhum servidor efetivo</li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            {/* Barra de proporção */}
-            <div className="px-4 pt-3 pb-1">
-              <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 bg-[#101922]">
-                {totalEfetivos > 0 && (
-                  <div
-                    className="bg-emerald-500 rounded-full transition-all duration-700"
-                    style={{ width: `${pctEfetivos}%` }}
-                  />
-                )}
-                {totalContratados > 0 && (
-                  <div
-                    className="bg-blue-500 rounded-full transition-all duration-700"
-                    style={{ width: `${pctContratados}%` }}
-                  />
-                )}
-              </div>
+            {/* Card Contratados */}
+            <div className="flex-1">
+              <button
+                onClick={() => setVinculoDropdown(v => v === 'contrato' ? null : 'contrato')}
+                className={`w-full flex flex-col items-center justify-center gap-1 py-5 px-3 transition-all active:scale-95
+                  ${vinculoDropdown === 'contrato'
+                    ? 'bg-blue-500/20 border-blue-400/60 shadow-blue-500/20 shadow-lg'
+                    : 'bg-blue-500/10 border-blue-500/25 hover:bg-blue-500/15'
+                  }
+                  border`}
+                style={{ borderRadius: '45% 55% 40% 60% / 50% 60% 40% 55%' }}
+              >
+                <span className="material-symbols-outlined text-blue-400 text-2xl">description</span>
+                <p className="text-3xl font-black text-blue-400 leading-none">{totalContratados}</p>
+                <p className="text-[10px] font-bold text-blue-400/80 uppercase tracking-wider">Contratados</p>
+                <span className="mt-1 text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full">
+                  {pctContratados}%
+                </span>
+              </button>
+
+              {/* Lista Contratados */}
+              {vinculoDropdown === 'contrato' && (
+                <div className="mt-2 rounded-2xl border border-blue-500/30 bg-[#1c2127] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="px-3 py-2 border-b border-blue-500/20 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-400 text-sm">description</span>
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Servidores Contratados ({totalContratados})</span>
+                  </div>
+                  <ul className="max-h-52 overflow-y-auto divide-y divide-gray-800">
+                    {servers.filter(s => s.vinculo === 'Contrato').map(s => (
+                      <li key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors">
+                        <div
+                          className="h-7 w-7 rounded-full bg-cover bg-center shrink-0"
+                          style={{ backgroundImage: `url('${s.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3b82f6&color=fff&size=60`}')` }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{s.name}</p>
+                          <p className="text-[9px] text-slate-500">{s.role} · {s.matricula}</p>
+                        </div>
+                        <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${getStatusColor(s.status)}`} />
+                      </li>
+                    ))}
+                    {totalContratados === 0 && (
+                      <li className="py-4 text-center text-[11px] text-slate-500">Nenhum servidor contratado</li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            {/* Contadores */}
-            <div className="grid grid-cols-2 divide-x divide-gray-800 px-4 pb-3 pt-2">
-              {/* Efetivos */}
-              <div className="flex items-center gap-3 pr-4">
-                <div className="p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25 shrink-0">
-                  <span className="material-symbols-outlined text-emerald-400 text-lg">verified</span>
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-emerald-400 leading-none">{totalEfetivos}</p>
-                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Efetivos</p>
-                  <span className="text-[9px] font-bold text-emerald-500/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/20">{pctEfetivos}%</span>
-                </div>
-              </div>
+          </div>
+        )}
 
-              {/* Contratados */}
-              <div className="flex items-center gap-3 pl-4">
-                <div className="p-2 rounded-xl bg-blue-500/15 border border-blue-500/25 shrink-0">
-                  <span className="material-symbols-outlined text-blue-400 text-lg">description</span>
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-blue-400 leading-none">{totalContratados}</p>
-                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Contratados</p>
-                  <span className="text-[9px] font-bold text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full border border-blue-500/20">{pctContratados}%</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Aviso: sem vínculo definido */}
-            {totalSemVinculo > 0 && (
-              <div className="px-4 pb-3">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                  <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
-                  <p className="text-[10px] text-amber-400 font-semibold">{totalSemVinculo} servidor{totalSemVinculo > 1 ? 'es' : ''} sem vínculo definido</p>
-                </div>
-              </div>
-            )}
+        {/* Aviso sem vínculo */}
+        {!isLoading && totalSemVinculo > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
+            <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
+            <p className="text-[10px] text-amber-400 font-semibold">{totalSemVinculo} servidor{totalSemVinculo > 1 ? 'es' : ''} sem vínculo definido</p>
           </div>
         )}
 
