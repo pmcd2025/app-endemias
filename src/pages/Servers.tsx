@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -44,8 +44,9 @@ const Servers: React.FC = () => {
   const [expandedGerais, setExpandedGerais] = useState<Set<string>>(new Set());
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
 
-  // Controle dos dropdowns de vínculo
-  const [vinculoDropdown, setVinculoDropdown] = useState<'efetivo' | 'contrato' | null>(null);
+  // Modal de visualização da lista de vínculo (Efetivos / Contratados)
+  const [vinculoModal, setVinculoModal] = useState<'Efetivo' | 'Contrato' | null>(null);
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
 
   const [formData, setFormData] = useState<NewServerForm>({
     nome: '',
@@ -452,6 +453,24 @@ const Servers: React.FC = () => {
   const pctEfetivos = totalServidores > 0 ? Math.round((totalEfetivos / totalServidores) * 100) : 0;
   const pctContratados = totalServidores > 0 ? Math.round((totalContratados / totalServidores) * 100) : 0;
 
+  // Servidores filtrados para o modal de vínculo
+  const modalServersList = useMemo(() => {
+    if (!vinculoModal) return [];
+    return servers
+      .filter(s => s.vinculo === vinculoModal)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [servers, vinculoModal]);
+
+  const filteredModalServers = useMemo(() => {
+    if (!modalSearchTerm.trim()) return modalServersList;
+    const term = modalSearchTerm.toLowerCase();
+    return modalServersList.filter(s =>
+      s.name.toLowerCase().includes(term) ||
+      s.matricula.toLowerCase().includes(term) ||
+      (s.role && s.role.toLowerCase().includes(term))
+    );
+  }, [modalServersList, modalSearchTerm]);
+
   // Funções de toggle para expandir/colapsar cards hierárquicos
   const toggleGeralExpanded = (id: string) => {
     setExpandedGerais(prev => {
@@ -638,122 +657,6 @@ const Servers: React.FC = () => {
           </button>
         </div>
 
-        {/* ── Cards de Vínculo em Gota ── */}
-        {!isLoading && totalServidores > 0 && (
-          <div className="space-y-2">
-
-            {/* Dois botões lado a lado compactos */}
-            <div className="flex gap-3">
-
-              {/* Botão Efetivos */}
-              <button
-                onClick={() => setVinculoDropdown(v => v === 'efetivo' ? null : 'efetivo')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 transition-all active:scale-95 select-none
-                  ${vinculoDropdown === 'efetivo'
-                    ? 'bg-emerald-500/25 border-emerald-400/50 shadow-md shadow-emerald-500/20'
-                    : 'bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15'
-                  } border`}
-                style={{ borderRadius: '70% 30% 70% 30% / 30% 70% 30% 70%' }}
-              >
-                <span className="material-symbols-outlined text-emerald-400 text-[18px]">verified</span>
-                <div className="text-left">
-                  <p className="text-lg font-black text-emerald-400 leading-none">{totalEfetivos}</p>
-                  <p className="text-[9px] font-bold text-emerald-500/70 uppercase tracking-wide leading-none mt-0.5">Efetivos · {pctEfetivos}%</p>
-                </div>
-                <span className={`material-symbols-outlined text-emerald-400/60 text-sm ml-auto transition-transform ${vinculoDropdown === 'efetivo' ? 'rotate-180' : ''}`}>
-                  expand_more
-                </span>
-              </button>
-
-              {/* Botão Contratados */}
-              <button
-                onClick={() => setVinculoDropdown(v => v === 'contrato' ? null : 'contrato')}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 transition-all active:scale-95 select-none
-                  ${vinculoDropdown === 'contrato'
-                    ? 'bg-blue-500/25 border-blue-400/50 shadow-md shadow-blue-500/20'
-                    : 'bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15'
-                  } border`}
-                style={{ borderRadius: '30% 70% 30% 70% / 70% 30% 70% 30%' }}
-              >
-                <span className="material-symbols-outlined text-blue-400 text-[18px]">description</span>
-                <div className="text-left">
-                  <p className="text-lg font-black text-blue-400 leading-none">{totalContratados}</p>
-                  <p className="text-[9px] font-bold text-blue-400/70 uppercase tracking-wide leading-none mt-0.5">Contratados · {pctContratados}%</p>
-                </div>
-                <span className={`material-symbols-outlined text-blue-400/60 text-sm ml-auto transition-transform ${vinculoDropdown === 'contrato' ? 'rotate-180' : ''}`}>
-                  expand_more
-                </span>
-              </button>
-
-            </div>
-
-            {/* Lista Efetivos — aparece ao clicar */}
-            {vinculoDropdown === 'efetivo' && (
-              <div className="rounded-2xl border border-emerald-500/30 bg-[#1c2127] overflow-hidden">
-                <div className="px-3 py-2 border-b border-emerald-500/20 flex items-center gap-2 bg-emerald-500/5">
-                  <span className="material-symbols-outlined text-emerald-400 text-sm">verified</span>
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Efetivos — {totalEfetivos} servidor{totalEfetivos !== 1 ? 'es' : ''}</span>
-                  <button onClick={() => setVinculoDropdown(null)} className="ml-auto text-slate-500 hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </div>
-                <ul className="max-h-56 overflow-y-auto divide-y divide-gray-800/80">
-                  {servers.filter(s => s.vinculo === 'Efetivo').sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-                    <li key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors">
-                      <div
-                        className="h-7 w-7 rounded-full bg-cover bg-center shrink-0 ring-1 ring-emerald-500/30"
-                        style={{ backgroundImage: `url('${s.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=10b981&color=fff&size=60`}')` }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{s.name}</p>
-                        <p className="text-[9px] text-slate-500">{s.role} · {s.matricula}</p>
-                      </div>
-                      <div className={`h-2 w-2 rounded-full shrink-0 ring-1 ring-black/20 ${getStatusColor(s.status)}`} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Lista Contratados — aparece ao clicar */}
-            {vinculoDropdown === 'contrato' && (
-              <div className="rounded-2xl border border-blue-500/30 bg-[#1c2127] overflow-hidden">
-                <div className="px-3 py-2 border-b border-blue-500/20 flex items-center gap-2 bg-blue-500/5">
-                  <span className="material-symbols-outlined text-blue-400 text-sm">description</span>
-                  <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Contratados — {totalContratados} servidor{totalContratados !== 1 ? 'es' : ''}</span>
-                  <button onClick={() => setVinculoDropdown(null)} className="ml-auto text-slate-500 hover:text-white transition-colors">
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                </div>
-                <ul className="max-h-56 overflow-y-auto divide-y divide-gray-800/80">
-                  {servers.filter(s => s.vinculo === 'Contrato').sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-                    <li key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors">
-                      <div
-                        className="h-7 w-7 rounded-full bg-cover bg-center shrink-0 ring-1 ring-blue-500/30"
-                        style={{ backgroundImage: `url('${s.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=3b82f6&color=fff&size=60`}')` }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{s.name}</p>
-                        <p className="text-[9px] text-slate-500">{s.role} · {s.matricula}</p>
-                      </div>
-                      <div className={`h-2 w-2 rounded-full shrink-0 ring-1 ring-black/20 ${getStatusColor(s.status)}`} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-          </div>
-        )}
-
-        {/* Aviso sem vínculo */}
-        {!isLoading && totalSemVinculo > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/5 border border-amber-500/20">
-            <span className="material-symbols-outlined text-amber-400 text-sm">warning</span>
-            <p className="text-[10px] text-amber-400 font-semibold">{totalSemVinculo} servidor{totalSemVinculo > 1 ? 'es' : ''} sem vínculo definido</p>
-          </div>
-        )}
-
         <div className="relative">
           <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
             <span className="material-symbols-outlined">search</span>
@@ -767,16 +670,47 @@ const Servers: React.FC = () => {
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 items-center">
           {Object.keys(filterMap).map((label, i) => (
             <button
               key={label}
               onClick={() => setStatusFilter(label)}
-              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${statusFilter === label ? 'bg-primary text-white' : 'bg-[#1c2127] text-slate-400 border border-gray-700'}`}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${statusFilter === label ? 'bg-primary text-white' : 'bg-[#1c2127] text-slate-400 border border-gray-700 hover:text-white'}`}
             >
               {label}
             </button>
           ))}
+
+          {/* Divisor sutil */}
+          <div className="w-px h-5 bg-gray-800 shrink-0 mx-1" />
+
+          {/* Botão Efetivos na sequência */}
+          <button
+            type="button"
+            onClick={() => { setModalSearchTerm(''); setVinculoModal('Efetivo'); }}
+            className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-all flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 active:scale-95"
+            title="Clique para ver a lista de servidores efetivos"
+          >
+            <span className="material-symbols-outlined text-[16px]">verified</span>
+            <span>Efetivos</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+              {totalEfetivos}
+            </span>
+          </button>
+
+          {/* Botão Contratados na sequência */}
+          <button
+            type="button"
+            onClick={() => { setModalSearchTerm(''); setVinculoModal('Contrato'); }}
+            className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-all flex items-center gap-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 active:scale-95"
+            title="Clique para ver a lista de servidores contratados"
+          >
+            <span className="material-symbols-outlined text-[16px]">description</span>
+            <span>Contratados</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30">
+              {totalContratados}
+            </span>
+          </button>
         </div>
 
         <div className="flex items-center justify-between">
@@ -1236,6 +1170,130 @@ const Servers: React.FC = () => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Lista de Vínculo (Efetivos / Contratados) */}
+      {vinculoModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setVinculoModal(null)}
+        >
+          <div
+            className="bg-[#1c2127] border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header do Modal */}
+            <div className={`flex items-center justify-between p-4 border-b border-gray-800 ${
+              vinculoModal === 'Efetivo'
+                ? 'bg-gradient-to-r from-emerald-500/15 to-transparent'
+                : 'bg-gradient-to-r from-blue-500/15 to-transparent'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-xl ${
+                  vinculoModal === 'Efetivo' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'
+                }`}>
+                  <span className="material-symbols-outlined text-xl">
+                    {vinculoModal === 'Efetivo' ? 'verified' : 'description'}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-white">
+                    Servidores {vinculoModal === 'Efetivo' ? 'Efetivos' : 'Contratados'}
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Total: <strong className="text-white">{modalServersList.length}</strong> {vinculoModal === 'Efetivo' ? `(${pctEfetivos}%)` : `(${pctContratados}%)`}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setVinculoModal(null)}
+                className="size-9 flex items-center justify-center rounded-full bg-gray-800 text-slate-300 hover:text-white hover:bg-gray-700 transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Campo de Busca no Modal */}
+            <div className="p-3 border-b border-gray-800/80 bg-[#14181d]">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-3 flex items-center text-slate-500">
+                  <span className="material-symbols-outlined text-base">search</span>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Buscar nesta lista por nome ou matrícula..."
+                  value={modalSearchTerm}
+                  onChange={(e) => setModalSearchTerm(e.target.value)}
+                  className="w-full bg-[#1c2127] border border-gray-700 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {/* Lista com scroll */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {filteredModalServers.map((server) => (
+                <div
+                  key={server.id}
+                  className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all ${
+                    vinculoModal === 'Efetivo'
+                      ? 'bg-emerald-500/5 border-emerald-500/15 hover:border-emerald-500/30'
+                      : 'bg-blue-500/5 border-blue-500/15 hover:border-blue-500/30'
+                  }`}
+                >
+                  <div
+                    className={`size-10 rounded-full bg-cover bg-center shrink-0 ring-2 ${
+                      vinculoModal === 'Efetivo' ? 'ring-emerald-500/30' : 'ring-blue-500/30'
+                    }`}
+                    style={{ backgroundImage: `url('${getAvatarUrl(server)}')` }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{server.name}</p>
+                    <p className="text-[11px] text-slate-400">{server.role} • Mat: {server.matricula}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase border ${
+                      vinculoModal === 'Efetivo'
+                        ? 'bg-emerald-400/10 text-emerald-400 border-emerald-400/25'
+                        : 'bg-blue-400/10 text-blue-400 border-blue-400/25'
+                    }`}>
+                      {server.vinculo || 'Indefinido'}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`size-2 rounded-full ${getStatusColor(server.status)}`} />
+                      <span className="text-[9px] text-slate-400">
+                        {server.status === 'active' ? 'Ativo' :
+                         server.status === 'inactive' ? 'Inativo' :
+                         server.status === 'vacation' ? 'Férias' :
+                         server.status === 'leave' ? 'Afastado' : server.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {filteredModalServers.length === 0 && (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-500">
+                  <span className="material-symbols-outlined text-3xl">search_off</span>
+                  <p className="text-xs">Nenhum servidor encontrado</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer do Modal */}
+            <div className="px-4 py-2.5 border-t border-gray-800 bg-[#161a20] flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Exibindo {filteredModalServers.length} de {modalServersList.length} servidores
+              </span>
+              <button
+                onClick={() => setVinculoModal(null)}
+                className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-white font-medium transition-colors"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
